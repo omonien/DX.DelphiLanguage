@@ -1,0 +1,52 @@
+﻿/// <summary>
+///   DLTests — DUnitX console runner for the DX.Delphi language model tests.
+/// </summary>
+/// <remarks>
+///   Build: dcc32 -U..\src -U..\libs\DUnitX\Source DLTests.dpr
+///   The runner auto-discovers [TestFixture] classes via RTTI from the units
+///   listed in the uses clause.
+/// </remarks>
+/// <author>Olaf Monien</author>
+/// <created>2026-08-04</created>
+/// <license>MIT</license>
+program DLTests;
+
+{$APPTYPE CONSOLE}
+{$R *.res}
+
+uses
+  System.SysUtils,
+  DUnitX.TestFramework,
+  DUnitX.Loggers.Console,
+  DUnitX.TestRunner,
+  DUnitX.MemoryLeakMonitor.Default,
+  DUnitX.AutoDetect.Console,
+  DUnitX.Windows.Console,
+  Tests.DX.Delphi.Support in 'Tests.DX.Delphi.Support.pas',
+  Tests.DX.Delphi.Core in 'Tests.DX.Delphi.Core.pas',
+  Tests.DX.Delphi.Lexer in 'Tests.DX.Delphi.Lexer.pas',
+  Tests.DX.Delphi.Parser in 'Tests.DX.Delphi.Parser.pas',
+  Tests.DX.Delphi.AstBuilder in 'Tests.DX.Delphi.AstBuilder.pas',
+  Tests.DX.Delphi.Samples in 'Tests.DX.Delphi.Samples.pas';
+
+var
+  LRunner: ITestRunner;
+  LResults: IRunResults;
+begin
+  try
+    LRunner := TDUnitX.CreateRunner;
+    LRunner.UseRTTI := True;
+    if TDUnitX.Options.ConsoleMode <> TDUnitXConsoleMode.Off then
+      LRunner.AddLogger(TDUnitXConsoleLogger.Create(
+        TDUnitX.Options.ConsoleMode = TDUnitXConsoleMode.Quiet));
+    LResults := LRunner.Execute;
+    if not LResults.AllPassed then
+      ExitCode := 1;
+  except
+    on E: Exception do
+    begin
+      Writeln(E.ClassName, ': ', E.Message);
+      ExitCode := 2;
+    end;
+  end;
+end.

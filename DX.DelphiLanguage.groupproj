@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+    <PropertyGroup>
+        <ProjectGuid>{C7C3E2D1-4B5F-4C6A-9D8E-1F2A3B4C5D8E}</ProjectGuid>
+        <ProjectVersion>19.6</ProjectVersion>
+    </PropertyGroup>
+    <ItemGroup>
+        <Projects Include="DLDemo.dproj">
+            <Dependencies/>
+        </Projects>
+        <Projects Include="tests\DLTests.dproj">
+            <Dependencies/>
+        </Projects>
+    </ItemGroup>
+    <ProjectExtensions>
+        <Borland.Personality>Default.Personality.12</Borland.Personality>
+        <Borland.ProjectType/>
+        <BorlandProject>
+            <Default.Personality/>
+        </BorlandProject>
+    </ProjectExtensions>
+    <Import Project="$(BDS)\Bin\CodeGear.Group.Targets" Condition="Exists('$(BDS)\Bin\CodeGear.Group.Targets')"/>
+</Project>

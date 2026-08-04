@@ -1,0 +1,31 @@
+#include <windows.h>
+
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION     1,0,0,0
+ PRODUCTVERSION  1,0,0,0
+ FILEFLAGSMASK   0x3fL
+ FILEFLAGS       0x0L
+ FILEOS          VOS_NT_WINDOWS32
+ FILETYPE        VFT_APP
+ FILESUBTYPE     0x0L
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904E4"
+        BEGIN
+            VALUE "CompanyName",      "Olaf Monien"
+            VALUE "FileDescription",  "DX.Delphi Language Model Demo"
+            VALUE "FileVersion",      "1.0.0.0"
+            VALUE "InternalName",     "DLDemo"
+            VALUE "LegalCopyright",   "Copyright (c) 2026 Olaf Monien"
+            VALUE "OriginalFilename", "DLDemo.exe"
+            VALUE "ProductName",      "DX.Delphi Language Model"
+            VALUE "ProductVersion",   "1.0.0.0"
+            VALUE "Comments",         "MIT License"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1252
+    END
+END

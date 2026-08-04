@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+    <PropertyGroup>
+        <ProjectGuid>{B7C3E2D1-4B5F-4C6A-9D8E-1F2A3B4C5D7E}</ProjectGuid>
+        <ProjectVersion>19.6</ProjectVersion>
+        <FrameworkType>None</FrameworkType>
+        <Base>true</Base>
+        <Config Condition="'$(Base)'=='true'">Base</Config>
+        <ProjectType>Application</ProjectType>
+        <Platform Condition="'$(Base)'=='true'">Win32</Platform>
+        <TargetedPlatforms>3</TargetedPlatforms>
+        <AppType>Console</AppType>
+    </PropertyGroup>
+    <PropertyGroup Condition="'$(Base)'=='true'">
+        <Base>true</Base>
+    </PropertyGroup>
+    <PropertyGroup Condition="'$(Base_Win32)'=='' and '$(Base)'=='true' and '$(Platform)'=='Win32'">
+        <Base_Win32>true</Base_Win32>
+        <Platform>Win32</Platform>
+        <ProjectVersion>19.6</ProjectVersion>
+        <DCC_Namespace>System;Xml;Data;Datasnap;Web;Soap;DX.Delphi</DCC_Namespace>
+        <DCC_UnitSearchPath>..\src;..\libs\DUnitX\Source</DCC_UnitSearchPath>
+        <DCC_OutputUnitDir>..\build\$(Platform)\$(Config)\dcu</DCC_OutputUnitDir>
+        <DCC_OutputFile>..\build\$(Platform)\$(Config)\DLTests.exe</DCC_OutputFile>
+        <DCC_UsePackage>rtl</DCC_UsePackage>
+        <SanitizedProjectName>DLTests</SanitizedProjectName>
+    </PropertyGroup>
+    <PropertyGroup Condition="'$(Cfg_1)'!=''">
+        <Cfg_1>true</Cfg_1>
+        <Cfg_2>false</Cfg_2>
+        <Platform>Win32</Platform>
+        <Config>Debug</Config>
+        <DCC_Define>DEBUG;$(DCC_Define)</DCC_Define>
+        <DCC_Optimize>false</DCC_Optimize>
+        <DCC_OutputUnitDir>..\build\$(Platform)\$(Config)\dcu</DCC_OutputUnitDir>
+        <DCC_OutputFile>..\build\$(Platform)\$(Config)\DLTests.exe</DCC_OutputFile>
+        <DCC_DebugInfoInExe>true</DCC_DebugInfoInExe>
+    </PropertyGroup>
+    <PropertyGroup Condition="'$(Cfg_1_Win32)'=='' and '$(Cfg_1)'=='true' and '$(Platform)'=='Win32'">
+        <Cfg_1_Win32>true</Cfg_1_Win32>
+        <Platform>Win32</Platform>
+        <DCC_UnitSearchPath>..\src;..\libs\DUnitX\Source</DCC_UnitSearchPath>
+        <DCC_Namespace>System;Xml;Data;Datasnap;Web;Soap;DX.Delphi</DCC_Namespace>
+        <DCC_OutputUnitDir>..\build\$(Platform)\$(Config)\dcu</DCC_OutputUnitDir>
+        <DCC_OutputFile>..\build\$(Platform)\$(Config)\DLTests.exe</DCC_OutputFile>
+        <SanitizedProjectName>DLTests</SanitizedProjectName>
+    </PropertyGroup>
+    <PropertyGroup Condition="'$(Cfg_2)'!=''">
+        <Cfg_2>true</Cfg_2>
+        <Cfg_1>false</Cfg_1>
+        <Platform>Win32</Platform>
+        <Config>Release</Config>
+        <DCC_Define>RELEASE;$(DCC_Define)</DCC_Define>
+        <DCC_Optimize>true</DCC_Optimize>
+        <DCC_OutputUnitDir>..\build\$(Platform)\$(Config)\dcu</DCC_OutputUnitDir>
+        <DCC_OutputFile>..\build\$(Platform)\$(Config)\DLTests.exe</DCC_OutputFile>
+    </PropertyGroup>
+    <PropertyGroup Condition="'$(Cfg_2_Win32)'=='' and '$(Cfg_2)'=='true' and '$(Platform)'=='Win32'">
+        <Cfg_2_Win32>true</Cfg_2_Win32>
+        <Platform>Win32</Platform>
+        <DCC_UnitSearchPath>..\src;..\libs\DUnitX\Source</DCC_UnitSearchPath>
+        <DCC_Namespace>System;Xml;Data;Datasnap;Web;Soap;DX.Delphi</DCC_Namespace>
+        <DCC_OutputUnitDir>..\build\$(Platform)\$(Config)\dcu</DCC_OutputUnitDir>
+        <DCC_OutputFile>..\build\$(Platform)\$(Config)\DLTests.exe</DCC_OutputFile>
+        <SanitizedProjectName>DLTests</SanitizedProjectName>
+    </PropertyGroup>
+    <ProjectExtensions>
+        <Borland.Personality>Delphi.Personality.12</Borland.Personality>
+        <Borland.ProjectType>Application</Borland.ProjectType>
+        <BorlandProject>
+            <Delphi.Personality>
+                <Source>
+                    <Source Name="MainSource">DLTests.dpr</Source>
+                </Source>
+                <FileVersion>
+                    <FileVersion Name="Major">1</FileVersion>
+                    <FileVersion Name="Minor">0</FileVersion>
+                    <FileVersion Name="Release">0</FileVersion>
+                    <FileVersion Name="Build">0</FileVersion>
+                </FileVersion>
+                <VersionInfo>
+                    <VersionInfo Name="IncludeVerInfo">True</VersionInfo>
+                    <VersionInfo Name="AutoIncBuild">False</VersionInfo>
+                    <VersionInfo Name="MajorVer">1</VersionInfo>
+                    <VersionInfo Name="MinorVer">0</VersionInfo>
+                    <VersionInfo Name="Release">0</VersionInfo>
+                    <VersionInfo Name="Build">0</VersionInfo>
+                    <VersionInfo Name="Debug">False</VersionInfo>
+                    <VersionInfo Name="PreRelease">False</VersionInfo>
+                    <VersionInfo Name="Special">False</VersionInfo>
+                    <VersionInfo Name="Private">False</VersionInfo>
+                    <VersionInfo Name="DLL">False</VersionInfo>
+                    <VersionInfo Name="Locale">1031</VersionInfo>
+                    <VersionInfo Name="CodePage">1252</VersionInfo>
+                </VersionInfo>
+                <VerInfo_Keys>
+                    <VerInfo_Keys Name="CompanyName">Olaf Monien</VerInfo_Keys>
+                    <VerInfo_Keys Name="FileDescription">DX.Delphi Language Model Tests</VerInfo_Keys>
+                    <VerInfo_Keys Name="FileVersion">1.0.0.0</VerInfo_Keys>
+                    <VerInfo_Keys Name="InternalName">DLTests</VerInfo_Keys>
+                    <VerInfo_Keys Name="LegalCopyright">Copyright (c) 2026 Olaf Monien</VerInfo_Keys>
+                    <VerInfo_Keys Name="OriginalFilename">DLTests.exe</VerInfo_Keys>
+                    <VerInfo_Keys Name="ProductName">DX.Delphi Language Model</VerInfo_Keys>
+                    <VerInfo_Keys Name="ProductVersion">1.0.0.0</VerInfo_Keys>
+                    <VerInfo_Keys Name="Comments">MIT License</VerInfo_Keys>
+                </VerInfo_Keys>
+            </Delphi.Personality>
+        </BorlandProject>
+    </ProjectExtensions>
+    <Import Project="$(BDS)\Bin\CodeGear.Delphi.Targets" Condition="Exists('$(BDS)\Bin\CodeGear.Delphi.Targets')"/>
+    <ItemGroup>
+        <DelphiCompile Include="DLTests.dpr">
+            <MainSource>MainSource</MainSource>
+        </DelphiCompile>
+        <DCCReference Include="Tests.DX.Delphi.Support.pas"/>
+        <DCCReference Include="Tests.DX.Delphi.Core.pas"/>
+        <DCCReference Include="Tests.DX.Delphi.Lexer.pas"/>
+        <DCCReference Include="Tests.DX.Delphi.Parser.pas"/>
+        <DCCReference Include="Tests.DX.Delphi.AstBuilder.pas"/>
+        <DCCReference Include="Tests.DX.Delphi.Samples.pas"/>
+        <DCCReference Include="..\src\DX.Delphi.Core.pas"/>
+        <DCCReference Include="..\src\DX.Delphi.Lexer.pas"/>
+        <DCCReference Include="..\src\DX.Delphi.CST.pas"/>
+        <DCCReference Include="..\src\DX.Delphi.Parser.pas"/>
+        <DCCReference Include="..\src\DX.Delphi.AST.pas"/>
+        <DCCReference Include="..\src\DX.Delphi.AstBuilder.pas"/>
+    </ItemGroup>
+</Project>
