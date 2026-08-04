@@ -82,7 +82,7 @@ var
 begin
   LDiagnostics := TDLDiagnostics.Create;
   try
-    LSource := StringOfChar('''', 3) + 'abc';
+    LSource := StringOfChar('''', 3) + #13#10 + 'abc';
     LexSource(LSource, LDiagnostics).Free;
     Assert.AreEqual('DLX-09', FirstErrorCode(LDiagnostics));
   finally

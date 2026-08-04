@@ -55,6 +55,7 @@ type
     FSteps: Integer;
     FCompoundGuard: Integer;
     FStmtDepth: Integer;
+    FDirectiveStmt: Boolean;
     function GetCur: TDLToken;
     function GetKind: TDLTokenKind;
     function GetKeyword: TDLKeyword;
@@ -79,6 +80,12 @@ type
     function TakeTrivia(AToken: TDLToken; ANode: TDLNode): TDLNode;
     procedure TakeLeadingTrivia(ANode: TDLNode);
     function TakeTriviaCopy: TList<TDLTrivia>;
+    function HasDirectiveTrivia: Boolean;
+    function HasConditionalStartTrivia: Boolean;
+    function HasConditionalContinuationTrivia: Boolean;
+    function IsQualifiedFollowedByDotDot: Boolean;
+    function SectionLeadsToBody: Boolean;
+    procedure SkipConditionalExpressionBranches;
     procedure SkipUntil(const AKeywords: array of TDLKeyword);
     procedure SkipToSemicolon;
 
@@ -245,10 +252,25 @@ end;
 
 function TDLDelphiParser.IsSoftNameKeyword: Boolean;
 begin
-  // Contextual (non-reserved) keywords that may legally appear as names.
+  // Contextual/directive keywords that Delphi allows as identifiers.
   Result := IsKeyword(kwIndex) or IsKeyword(kwName) or IsKeyword(kwOn) or
     IsKeyword(kwAt) or IsKeyword(kwBreak) or IsKeyword(kwContinue) or
-    IsKeyword(kwRef) or IsKeyword(kwHelper) or IsKeyword(kwOperator);
+    IsKeyword(kwRef) or IsKeyword(kwHelper) or IsKeyword(kwOperator) or
+    IsKeyword(kwDefault) or IsKeyword(kwImplements) or IsKeyword(kwRead) or
+    IsKeyword(kwWrite) or IsKeyword(kwStored) or IsKeyword(kwReadOnly) or
+    IsKeyword(kwWriteOnly) or IsKeyword(kwMessage) or IsKeyword(kwDeprecated) or
+    IsKeyword(kwExternal) or IsKeyword(kwForward) or IsKeyword(kwVirtual) or
+    IsKeyword(kwDynamic) or IsKeyword(kwOverride) or IsKeyword(kwOverload) or
+    IsKeyword(kwReintroduce) or IsKeyword(kwAbstract) or IsKeyword(kwFinal) or
+    IsKeyword(kwSealed) or IsKeyword(kwInline) or IsKeyword(kwStatic) or
+    IsKeyword(kwAssembler) or IsKeyword(kwRegister) or IsKeyword(kwPascal) or
+    IsKeyword(kwCdecl) or IsKeyword(kwStdcall) or IsKeyword(kwSafecall) or
+    IsKeyword(kwPlatform) or IsKeyword(kwExperimental) or IsKeyword(kwUnsafe) or
+    IsKeyword(kwVarargs) or IsKeyword(kwNear) or IsKeyword(kwFar) or
+    IsKeyword(kwAbsolute) or IsKeyword(kwAutomated) or IsKeyword(kwDispInterface) or
+    IsKeyword(kwContains) or IsKeyword(kwRequires) or IsKeyword(kwPackage) or
+    IsKeyword(kwFile) or IsKeyword(kwLabel) or IsKeyword(kwString) or
+    IsKeyword(kwNoReturn) or IsKeyword(kwReference);
 end;
 
 function TDLDelphiParser.IsSymbol(const ASymbol: string): Boolean;
@@ -368,6 +390,155 @@ begin
     Result.Add(GetCur.LeadingTrivia[i]);
 end;
 
+function TDLDelphiParser.HasDirectiveTrivia: Boolean;
+var
+  i: Integer;
+begin
+  Result := False;
+  for i := 0 to GetCur.LeadingTrivia.Count - 1 do
+    if GetCur.LeadingTrivia[i].Kind = trDirective then
+      Exit(True);
+end;
+
+function TDLDelphiParser.HasConditionalStartTrivia: Boolean;
+var
+  i: Integer;
+  LText: string;
+begin
+  // True when a compiler directive in the leading trivia OPENS a conditional
+  // branch ({$IFDEF}, {$IFNDEF}, {$IF ...}, {$ELSE}, {$ELSEIF}). An {$ENDIF}
+  // closes a branch and must not trigger body/branch continuation handling.
+  Result := False;
+  for i := 0 to GetCur.LeadingTrivia.Count - 1 do
+    if GetCur.LeadingTrivia[i].Kind = trDirective then
+    begin
+      LText := LowerCase(Trim(GetCur.LeadingTrivia[i].Text));
+      if (Pos('{$ifdef', LText) = 1) or (Pos('{$ifndef', LText) = 1) or
+         (Pos('{$if ', LText) = 1) or (Pos('{$if(', LText) = 1) or
+         (Pos('{$else', LText) = 1) then
+        Exit(True);
+    end;
+end;
+
+function TDLDelphiParser.HasConditionalContinuationTrivia: Boolean;
+var
+  i: Integer;
+  LText: string;
+begin
+  // True only for {$ELSE}/{$ELSEIF} directives (continuation of the CURRENT
+  // conditional branch chain), never for a fresh {$IFDEF}/{$IF}.
+  Result := False;
+  for i := 0 to GetCur.LeadingTrivia.Count - 1 do
+    if GetCur.LeadingTrivia[i].Kind = trDirective then
+    begin
+      LText := LowerCase(Trim(GetCur.LeadingTrivia[i].Text));
+      if Pos('{$else', LText) = 1 then
+        Exit(True);
+    end;
+end;
+
+function TDLDelphiParser.IsQualifiedFollowedByDotDot: Boolean;
+var
+  LIndex: Integer;
+  LDepth: Integer;
+begin
+  // Current token is an identifier; skip ".segment" pairs and balanced
+  // "(...)" calls, then check whether the next token is ".." (subrange with
+  // qualified/call endpoints: TEnum.Member..TEnum.Member, Low(X)..High(X)).
+  LIndex := 1;
+  while (Peek(LIndex).Kind = tkSymbol) and (Peek(LIndex).Text = '.') and
+        ((Peek(LIndex + 1).Kind = tkIdentifier) or
+         (Peek(LIndex + 1).Kind = tkKeyword)) do
+    Inc(LIndex, 2);
+  if (Peek(LIndex).Kind = tkSymbol) and (Peek(LIndex).Text = '(') then
+  begin
+    LDepth := 0;
+    while (Peek(LIndex).Kind <> tkEOF) do
+    begin
+      if (Peek(LIndex).Kind = tkSymbol) and (Peek(LIndex).Text = '(') then
+        Inc(LDepth)
+      else if (Peek(LIndex).Kind = tkSymbol) and (Peek(LIndex).Text = ')') then
+      begin
+        Dec(LDepth);
+        if LDepth = 0 then
+        begin
+          Inc(LIndex);
+          Break;
+        end;
+      end;
+      Inc(LIndex);
+    end;
+  end;
+  Result := (Peek(LIndex).Kind = tkSymbol) and (Peek(LIndex).Text = '..');
+end;
+
+function TDLDelphiParser.SectionLeadsToBody: Boolean;
+var
+  i: Integer;
+  LInHeader: Boolean;
+  LDepth: Integer;
+begin
+  // Scan (bounded) from the current token; if a body keyword (begin/asm)
+  // appears before a new declaration keyword, the section belongs to a
+  // method body branch. Used to decide whether a fresh {$IFDEF}-introduced
+  // section continues the current body or is a new enclosing-scope section.
+  Result := False;
+  LInHeader := (Peek(0).Kind = tkKeyword) and
+               ((Peek(0).Text = 'procedure') or (Peek(0).Text = 'function'));
+  LDepth := 0;
+  for i := 0 to 100 do
+  begin
+    if Peek(i).Kind = tkEOF then
+      Exit;
+    if LInHeader then
+    begin
+      // Skip the method header up to its terminating ';' at paren depth 0.
+      if (Peek(i).Kind = tkSymbol) and (Peek(i).Text = '(') then
+        Inc(LDepth)
+      else if (Peek(i).Kind = tkSymbol) and (Peek(i).Text = ')') then
+        Dec(LDepth)
+      else if (Peek(i).Kind = tkSymbol) and (Peek(i).Text = ';') and
+              (LDepth = 0) then
+        LInHeader := False;
+      Continue;
+    end;
+    if Peek(i).Kind = tkKeyword then
+      if (Peek(i).Text = 'begin') or (Peek(i).Text = 'asm') then
+        Exit(True)
+      else if (Peek(i).Text = 'function') or (Peek(i).Text = 'procedure') or
+              (Peek(i).Text = 'end') or (Peek(i).Text = 'class') or
+              (Peek(i).Text = 'interface') or (Peek(i).Text = 'type') then
+        Exit(False);
+  end;
+end;
+
+procedure TDLDelphiParser.SkipConditionalExpressionBranches;
+begin
+  // A branch may be terminated by a semicolon before the next branch's
+  // continuation operator:
+  //   X := A or B; {$ELSE} or C; {$ENDIF}
+  if IsSymbol(';') then
+    Advance;
+  // An expression may continue over conditional-compilation branches:
+  //   X := A
+  // {$IFDEF Y} or B; {$ELSE} or C; {$ENDIF}
+  while HasConditionalStartTrivia and
+        (IsKeyword(kwOr) or IsKeyword(kwAnd) or IsKeyword(kwXor) or
+         IsKeyword(kwDiv) or IsKeyword(kwMod) or IsKeyword(kwShl) or
+         IsKeyword(kwShr) or IsSymbol('+') or IsSymbol('-') or
+         IsSymbol('*') or IsSymbol('/') or IsSymbol('=') or
+         IsSymbol('>') or IsSymbol('<') or IsSymbol('>=') or
+         IsSymbol('<=') or IsSymbol('<>')) do
+  begin
+    Advance; // the continuation operator begins the alternate branch
+    ParseExpression.Free;
+    if IsSymbol(';') then
+      Advance
+    else
+      Break;
+  end;
+end;
+
 procedure TDLDelphiParser.SkipUntil(const AKeywords: array of TDLKeyword);
 var
   i: Integer;
@@ -445,6 +616,12 @@ begin
     LKind := pkUnit;
     LName := MakeIdentifier;
     ExpandDottedName(LName);
+    if IsKeyword(kwDeprecated) then
+    begin
+      Advance;
+      if GetKind = tkString then
+        Advance;
+    end;
     ExpectSemicolon;
   end
   else if IsKeyword(kwLibrary) then
@@ -670,6 +847,29 @@ begin
     // function's sub-parsers where relevant. We keep it simple: if the next
     // token is not a declaration keyword, skip ahead.
   end;
+  if IsKeyword(kwClass) and (IsKwAhead(kwFunction, 1) or
+     IsKwAhead(kwProcedure, 1) or IsKwAhead(kwConstructor, 1) or
+     IsKwAhead(kwDestructor, 1) or IsKwAhead(kwOperator, 1)) then
+  begin
+    Advance; // class
+    case GetKeyword of
+      kwFunction: LProcKind := prFunction;
+      kwProcedure: LProcKind := prProcedure;
+      kwConstructor: LProcKind := prConstructor;
+      kwOperator: LProcKind := prOperator;
+    else
+      LProcKind := prDestructor;
+    end;
+    LMethod := ParseMethodHeader(LProcKind, cmClass, AAllowBodies);
+    Result := LMethod;
+    if (LAttributes <> nil) and (LAttributes.Count > 0) then
+    begin
+      TDLProcedureBase(Result).Attributes.AddRange(LAttributes);
+      LAttributes.Clear;
+    end;
+    LAttributes.Free;
+    Exit;
+  end;
   LKeyword := GetKeyword;
   case LKeyword of
     kwType:
@@ -807,6 +1007,14 @@ begin
   if IsKeyword(kwType) then
     Advance; // 'type X = type Y' alias form
   LTypeExpr := ParseTypeExpr;
+  // type X = ... platform/deprecated;  (directives after the type)
+  while IsKeyword(kwDeprecated) or IsKeyword(kwPlatform) or
+        IsKeyword(kwExperimental) do
+  begin
+    Advance;
+    if GetKind = tkString then
+      ParseStringSequence.Free;
+  end;
   LDecl := TDLTypeDecl.Create(TDLSourceSpan.Create(LStart.Start, GetSpan.Stop),
     LName, LTypeExpr);
   LDecl.LeadingTrivia.AddRange(LTrivia);
@@ -861,12 +1069,32 @@ begin
   while GetKind <> tkEOF do
   begin
     LPrevPos := FPos;
-    if (GetKind = tkIdentifier) then
+    if (GetKind = tkIdentifier) or IsSoftNameKeyword then
       LSection.Items.Add(ParseConstDecl)
     else
       Break;
     if FPos = LPrevPos then
       Advance; // resynchronise
+    // Skip alternate branches of conditional compilation in const value
+    // position:  X = {$IFDEF A}1{$ELSE}2{$ENDIF};
+    while HasConditionalStartTrivia and
+          ((GetKind in [tkString, tkInteger, tkFloat, tkCharCode]) or
+           IsIdentifier or IsSymbol('[')) do
+    begin
+      if (IsIdentifier or IsSoftNameKeyword) and
+         (IsSymbolAhead('=', 1) or IsSymbolAhead(':', 1)) then
+        // Alternate const declaration in a conditional branch:
+        //   X = 1; {$ELSE} X = 2; {$ENDIF}
+        ParseConstDecl.Free
+      else
+      begin
+        ParseExpression.Free;
+        if IsSymbol(';') then
+          Advance
+        else
+          Break;
+      end;
+    end;
   end;
   Result := LSection;
 end;
@@ -875,6 +1103,8 @@ function TDLDelphiParser.ParseConstDecl: TDLConstDecl;
 var
   LDecl: TDLConstDecl;
   LName: TDLIdentifier;
+  LDepth: Integer;
+  LIsRecordConst: Boolean;
 begin
   LDecl := TDLConstDecl.Create(GetSpan);
   TakeLeadingTrivia(LDecl);
@@ -898,7 +1128,58 @@ begin
   if IsSymbol('=') then
   begin
     Advance;
-    LDecl.Value := ParseExpression;
+    LIsRecordConst := False;
+    if IsSymbol('(') then
+    begin
+      if (Peek(1).Kind = tkSymbol) and (Peek(1).Text = '(') then
+        LIsRecordConst := True // array of records: ( (A: ...); ... )
+      else if (Peek(1).Kind = tkSymbol) and (Peek(1).Text = ')') then
+        LIsRecordConst := True // empty record value: ()
+      else if ((Peek(1).Kind = tkIdentifier) or (Peek(1).Kind = tkKeyword)) and
+              (Peek(2).Kind = tkSymbol) and (Peek(2).Text = ':') then
+        LIsRecordConst := True; // record value: (A: ...)
+      if LIsRecordConst then
+      begin
+        // Typed constant with a record value:  X: T = (Field: v; ...);
+        // Skip the value with balanced parentheses (records and arrays of
+        // records); the exact structure is not represented in the CST.
+        Advance;
+        LDepth := 1;
+        while (GetKind <> tkEOF) and (LDepth > 0) do
+        begin
+          if IsSymbol('(') then
+            Inc(LDepth)
+          else if IsSymbol(')') then
+            Dec(LDepth);
+          Advance;
+        end;
+      end
+      else
+        LDecl.Value := ParseExpression;
+    end
+    else
+      LDecl.Value := ParseExpression;
+    // A const value may be split by conditional compilation:
+    //   X = {$IFDEF A}1{$ELSE}2{$ENDIF};
+    while HasConditionalStartTrivia and
+          ((GetKind in [tkString, tkInteger, tkFloat, tkCharCode]) or
+           IsIdentifier or IsSymbol('[')) do
+    begin
+      if (IsIdentifier or IsSoftNameKeyword) and
+         (IsSymbolAhead('=', 1) or IsSymbolAhead(':', 1)) then
+        Break; // a new const declaration, not an alternate branch value
+      ParseExpression.Free;
+      if IsSymbol(';') then
+        Break; // the terminating ';' is consumed by ExpectSemicolon below
+    end;
+  end;
+  // const X = expr platform deprecated;  (multiple directives allowed)
+  while IsKeyword(kwDeprecated) or IsKeyword(kwPlatform) or
+        IsKeyword(kwExperimental) do
+  begin
+    Advance;
+    if GetKind = tkString then
+      ParseStringSequence.Free;
   end;
   ExpectSemicolon;
   Result := LDecl;
@@ -935,6 +1216,12 @@ begin
   while GetKind <> tkEOF do
   begin
     LPrevPos := FPos;
+    if IsSymbol('[') then
+    begin
+      // Attribute on a variable declaration:  [Unsafe] X: T;
+      ParseAttributes.Free;
+      Continue;
+    end;
     if IsIdentifier or IsSoftNameKeyword then
       LSection.Items.Add(ParseVarDecl)
     else
@@ -949,6 +1236,7 @@ function TDLDelphiParser.ParseVarDecl: TDLVarDecl;
 var
   LDecl: TDLVarDecl;
   LName: TDLIdentifier;
+  LDepth: Integer;
 begin
   LDecl := TDLVarDecl.Create(GetSpan);
   TakeLeadingTrivia(LDecl);
@@ -976,13 +1264,38 @@ begin
   if IsSymbol('=') then
   begin
     Advance;
-    LDecl.Init := ParseExpression;
+    if IsSymbol('(') and
+       (((Peek(1).Kind = tkIdentifier) or (Peek(1).Kind = tkKeyword)) and
+        (Peek(2).Kind = tkSymbol) and (Peek(2).Text = ':')) then
+    begin
+      // var X: T = (Field: v; ...);  -- record constant initializer
+      Advance;
+      LDepth := 1;
+      while (GetKind <> tkEOF) and (LDepth > 0) do
+      begin
+        if IsSymbol('(') then
+          Inc(LDepth)
+        else if IsSymbol(')') then
+          Dec(LDepth);
+        Advance;
+      end;
+    end
+    else
+      LDecl.Init := ParseExpression;
   end;
   if IsSymbol(':=') then
   begin
     // inline var initialization (var x := 42;)
     Advance;
     LDecl.Init := ParseExpression;
+  end;
+  // var X: T = nil platform deprecated;
+  while IsKeyword(kwPlatform) or IsKeyword(kwDeprecated) or
+        IsKeyword(kwExperimental) do
+  begin
+    Advance;
+    if GetKind = tkString then
+      ParseStringSequence.Free;
   end;
   ExpectSemicolon;
   Result := LDecl;
@@ -1219,12 +1532,15 @@ begin
     kwObject:
       Result := ParseClassLike(pkPackage);
     kwReference:
+      if IsKwAhead(kwTo, 1) then
       begin
         Advance;
         ExpectKeyword(kwTo);
         Result := ParseProceduralType;
         TDLProceduralType(Result).IsReferenceTo := True;
-      end;
+      end
+      else
+        Result := ParseNamedType; // 'Reference' as a type name
     kwProcedure, kwFunction:
       Result := ParseProceduralType;
     kwPacked:
@@ -1247,14 +1563,17 @@ begin
       Result := ParseEnumOrSubrange
     else if (GetKind = tkIdentifier) or (GetKind = tkKeyword) then
     begin
-      if IsSymbolAhead('..', 1) then
+      // Subrange with a qualified endpoint: TEnum.Member..TEnum.Member
+      if IsSymbolAhead('..', 1) or
+         ((GetKind = tkIdentifier) and IsQualifiedFollowedByDotDot) then
         Result := ParseSubrangeType
       else
         Result := ParseNamedType;
     end
     else if (GetKind = tkInteger) or (GetKind = tkString) or
             (GetKind = tkCharCode) or
-            (IsSymbol('-') and (Peek(1).Kind = tkInteger)) then
+            (IsSymbol('-') and ((Peek(1).Kind = tkInteger) or
+             (Peek(1).Kind = tkIdentifier))) then
       Result := ParseSubrangeType
     else if IsSymbol('^') then
     begin
@@ -1275,6 +1594,11 @@ begin
     else if Result is TDLStaticArrayType then
       ; // packed static arrays carry no separate flag in our CST
   end;
+  // Skip alternate branches of conditional compilation in type position:
+  // x: {$IFDEF A}T1{$ELSE}T2{$ENDIF};  (conditional compilation is not
+  // evaluated; the alternate branch token carries {$IFDEF}/{$ELSE} trivia).
+  while ((IsIdentifier) or (GetKind = tkKeyword)) and HasDirectiveTrivia do
+    Advance;
   finally
     Dec(FStmtDepth);
   end;
@@ -1288,9 +1612,14 @@ var
 begin
   LStart := GetSpan;
   LName := MakeIdentifier;
+  // Qualified type references: System.Types.TWaitResult
+  ExpandDottedName(LName);
   LType := TDLNamedType.Create(LStart, LName);
   if IsSymbol('<') then
     LType.TypeArgs.AddRange(ParseTypeArgs);
+  // Qualified member of a generic instantiation: TList<T>.ParrayofT
+  if IsSymbol('.') then
+    ExpandDottedName(LName);
   Result := LType;
 end;
 
@@ -1371,6 +1700,14 @@ begin
     else
       Advance;
   end;
+  // (a, b, c) platform/deprecated  -- directive after an enum type
+  if IsKeyword(kwPlatform) or IsKeyword(kwDeprecated) or
+     IsKeyword(kwExperimental) then
+  begin
+    Advance;
+    if GetKind = tkString then
+      ParseStringSequence.Free;
+  end;
   Result := LEnum;
 end;
 
@@ -1414,6 +1751,20 @@ begin
       Advance; // resynchronise
   end;
   ExpectKeyword(kwEnd);
+  if IsIdentifier and (LowerCase(GetText) = 'align') then
+  begin
+    // "end align 16;" alignment specifier after a record/class type
+    Advance;
+    if GetKind = tkInteger then
+      Advance;
+  end;
+  if IsKeyword(kwDeprecated) or IsKeyword(kwPlatform) or
+     IsKeyword(kwExperimental) then
+  begin
+    Advance;
+    if GetKind = tkString then
+      ParseStringSequence.Free;
+  end;
   Result := LRecord;
 end;
 
@@ -1447,14 +1798,16 @@ var
   LBranch: TDLVariantBranch;
 begin
   LSection := TDLVariantSection.Create(GetSpan);
-  if IsIdentifier then
-    LSection.Tag := MakeIdentifier
-  else
-    Error('Expected variant tag identifier');
-  ExpectSymbol(':');
+  // Variant part: "case [Tag:] Type of"  (the tag is optional).
+  if IsIdentifier and IsSymbolAhead(':', 1) then
+  begin
+    LSection.Tag := MakeIdentifier;
+    ExpectSymbol(':');
+  end;
   LSection.TagType := ParseTypeExpr;
   ExpectKeyword(kwOf);
-  while (GetKind <> tkEOF) and (not IsKeyword(kwEnd)) do
+  while (GetKind <> tkEOF) and (not IsKeyword(kwEnd)) and
+        (not IsSymbol(')')) do
   begin
     LBranch := TDLVariantBranch.Create(GetSpan);
     LSection.Variants.Add(LBranch);
@@ -1607,6 +1960,19 @@ begin
         Advance;
     end;
     ExpectKeyword(kwEnd);
+    if IsIdentifier and (LowerCase(GetText) = 'align') then
+    begin
+      Advance;
+      if GetKind = tkInteger then
+        Advance;
+    end;
+    if IsKeyword(kwDeprecated) or IsKeyword(kwPlatform) or
+       IsKeyword(kwExperimental) then
+    begin
+      Advance;
+      if GetKind = tkString then
+        ParseStringSequence.Free;
+    end;
   end;
   LClass := TDLClassType.Create(LStart, LIsSealed, LIsAbstract, LIsHelper,
     LIsClassRef, LIsDisp, LIsObject, LIsInterface, LBase, LHelperFor, LMembers);
@@ -1782,6 +2148,10 @@ begin
   begin
     Advance;
     LParam.DefaultValue := ParseExpression;
+    // Default value may span conditional branches:
+    //   X: T = {$IFDEF A} v1 {$ENDIF} {$IFDEF B} v2 {$ENDIF};
+    while HasConditionalStartTrivia and IsIdentifier do
+      ParseExpression.Free;
   end;
   Result := LParam;
 end;
@@ -1835,6 +2205,9 @@ begin
     Exit;
   end;
 
+  if IsSymbol('[') then
+    ParseAttributes.Free; // member attributes; cosmetic for parsing
+
   LClassModifier := cmNone;
   if IsKeyword(kwClass) then
   begin
@@ -1852,7 +2225,7 @@ begin
       Advance; // class
       LProcKind := prOperator;
       LClassModifier := cmClass;
-      LMethod := ParseMethodHeader(LProcKind, LClassModifier, True);
+      LMethod := ParseMethodHeader(LProcKind, LClassModifier, False);
       AMembers.Add(TDLMember(LMethod));
       Exit;
     end
@@ -1875,7 +2248,7 @@ begin
       else
         LProcKind := prProcedure;
       end;
-      LMethod := ParseMethodHeader(LProcKind, LClassModifier, True);
+      LMethod := ParseMethodHeader(LProcKind, LClassModifier, False);
       AMembers.Add(TDLMember(LMethod));
       Exit;
     end
@@ -1906,11 +2279,11 @@ begin
         else
           LProcKind := prDestructor;
         end;
-        LMethod := ParseMethodHeader(LProcKind, cmNone, True);
+        LMethod := ParseMethodHeader(LProcKind, cmNone, False);
         AMembers.Add(TDLMember(LMethod));
       end;
     kwOperator:
-      AMembers.Add(TDLMember(ParseMethodHeader(prOperator, cmNone, True)));
+      AMembers.Add(TDLMember(ParseMethodHeader(prOperator, cmNone, False)));
     kwProperty:
       AMembers.Add(ParsePropertyDecl);
     kwVar:
@@ -1941,7 +2314,11 @@ end;
 function TDLDelphiParser.ParseFieldDecl: TDLFieldDecl;
 begin
   Result := ParseFieldDeclBody;
-  ExpectSemicolon;
+  // The final field of an inline record type may omit the ';' before "end":
+  //   array[0..3] of record A: X; B: Y end
+  if not (IsKeyword(kwEnd) or IsSymbol(')') or IsKeyword(kwCase) or
+          IsKeyword(kwBegin)) then
+    ExpectSemicolon;
 end;
 
 function TDLDelphiParser.ParseFieldDeclBody: TDLFieldDecl;
@@ -1964,6 +2341,14 @@ begin
   end;
   ExpectSymbol(':');
   LField.TypeExpr := ParseTypeExpr;
+  // FHandle: THandle platform;
+  while IsKeyword(kwPlatform) or IsKeyword(kwDeprecated) or
+        IsKeyword(kwExperimental) do
+  begin
+    Advance;
+    if GetKind = tkString then
+      ParseStringSequence.Free;
+  end;
   Result := LField;
 end;
 
@@ -1975,10 +2360,19 @@ var
   LHeader: TDLProcedureBase;
   LImpl: TDLMethodImpl;
   LIsClassOperator: Boolean;
+  LHasForward: Boolean;
+  LDirective: TDLDirective;
+  LContDirs: TList<TDLDirective>;
+  LContSave: Integer;
+  LEnclosingName: string;
+  LBodyConditional: Boolean;
+  LDbgLine: Integer;
   LFullName: string;
   LTrivia: TList<TDLTrivia>;
 begin
   LStart := GetSpan;
+  LDbgLine := LStart.Start.Line;
+  FDirectiveStmt := False;
   LTrivia := TakeTriviaCopy;
   try
   if AKind = prOperator then
@@ -2044,6 +2438,28 @@ begin
         Advance;
     end;
     ExpectSymbol('>');
+    // Generic class name with a member method: TCls<T>.Method
+    if IsSymbol('.') then
+    begin
+      LFullName := LName.Name;
+      while IsSymbol('.') do
+      begin
+        Advance;
+        LName.Free;
+        LName := MakeIdentifier;
+        LFullName := LFullName + '.' + LName.Name;
+      end;
+      LName.SetName(LFullName);
+    end;
+  end;
+  // Interface-implementation mapping:  function IRef.M = ImplMethod;
+  if IsSymbol('=') then
+  begin
+    Advance;
+    if IsIdentifier then
+      MakeIdentifier.Free
+    else
+      Error('Expected implementing method name after "="');
   end;
   LHeader := TDLMethodDecl.Create(LStart, AKind, LName, AClassModifier);
   if IsSymbol('(') then
@@ -2055,10 +2471,20 @@ begin
   end;
   ParseMethodDirectivesAndSemicolons(LHeader.Directives);
   ExpectSemicolon;
-  if AAllowBody and (IsKeyword(kwBegin) or IsKeyword(kwAsm) or
-     IsKeyword(kwVar) or IsKeyword(kwLabel) or IsKeyword(kwConst) or
-     IsKeyword(kwType)) then
+  // A forward-declared routine has no body; the following token belongs to
+  // the enclosing scope even if it is a section keyword (var/type/...).
+  // Externally imported routines (external ...) likewise have no body.
+  LHasForward := False;
+  for LDirective in LHeader.Directives do
+    if SameText(LDirective.Name.Name, 'forward') or
+       SameText(LDirective.Name.Name, 'external') then
+      LHasForward := True;
+  if AAllowBody and (not LHasForward) and
+     (IsKeyword(kwBegin) or IsKeyword(kwAsm) or
+      IsKeyword(kwVar) or IsKeyword(kwLabel) or IsKeyword(kwConst) or
+      IsKeyword(kwType) or IsKeyword(kwFunction) or IsKeyword(kwProcedure)) then
   begin
+    LBodyConditional := HasConditionalStartTrivia or FDirectiveStmt;
     LImpl := TDLMethodImpl.Create(LStart, AKind,
       TDLIdentifier.Create(LName.Name, LName.Span, LName.IsAmpersand),
       AClassModifier);
@@ -2071,16 +2497,41 @@ begin
     if LHeader.OperatorName <> nil then
       LImpl.OperatorName := TDLIdentifier.Create(LHeader.OperatorName.Name,
         LHeader.OperatorName.Span, LHeader.OperatorName.IsAmpersand);
+    LEnclosingName := LName.Name; // LName is owned by LHeader (freed below)
     LHeader.Free;
-    // Local declarations (var/label/const/type sections) before the body.
+    // Local declarations (var/label/const/type sections and nested
+    // procedure/function declarations) before the body.
     while IsKeyword(kwVar) or IsKeyword(kwLabel) or IsKeyword(kwConst) or
-          IsKeyword(kwType) do
+          IsKeyword(kwType) or IsKeyword(kwFunction) or
+          IsKeyword(kwProcedure) do
     begin
       case GetKeyword of
         kwVar: LImpl.LocalDecls.Add(ParseVarSection(False));
         kwLabel: LImpl.LocalDecls.Add(ParseLabelSection);
         kwConst: LImpl.LocalDecls.Add(ParseConstSection);
         kwType: LImpl.LocalDecls.Add(ParseTypeSection);
+        kwFunction, kwProcedure:
+          begin
+          if HasConditionalStartTrivia and
+             (Peek(1).Kind = tkIdentifier) and
+             ((SameText(Peek(1).Text, LEnclosingName)) or
+              ((Pos('.', LEnclosingName) > 0) and
+               SameText(Peek(1).Text,
+                 Copy(LEnclosingName, 1, Pos('.', LEnclosingName) - 1)))) then
+          begin
+            // An alternate conditional header branch ({$IFDEF X}
+            // procedure A; {$ELSE} procedure B; {$ENDIF}) is parsed header-only
+            // and discarded; it is not a nested routine.
+            if IsKeyword(kwFunction) then
+              ParseMethodHeader(prFunction, cmNone, False).Free
+            else
+              ParseMethodHeader(prProcedure, cmNone, False).Free;
+          end
+          else if IsKeyword(kwFunction) then
+            LImpl.LocalDecls.Add(ParseMethodHeader(prFunction, cmNone, True))
+          else
+            LImpl.LocalDecls.Add(ParseMethodHeader(prProcedure, cmNone, True));
+          end;
       end;
     end;
     if IsKeyword(kwAsm) then
@@ -2088,6 +2539,84 @@ begin
     else
       LImpl.Body := ParseCompoundStmt;
     ExpectSemicolon;
+    // Conditional compilation may split one method body into several
+    // begin...end; blocks ({$IFDEF X} var..begin..end; {$ENDIF}). Parse every
+    // additional branch but keep only the first as the method body.
+    // Only a conditional body (split into {$IFDEF}/{$ELSE} branches) needs
+    // continuation handling; a plain body followed by a directive-introduced
+    // section belongs to the enclosing scope.
+    FDirectiveStmt := False;
+    while LBodyConditional and
+          (((IsKeyword(kwBegin) or IsKeyword(kwAsm) or IsKeyword(kwVar) or
+             IsKeyword(kwType) or IsKeyword(kwConst) or IsKeyword(kwLabel)) and
+            (HasConditionalStartTrivia or FDirectiveStmt)) or
+           ((IsKeyword(kwProcedure) or IsKeyword(kwFunction)) and
+            (FDirectiveStmt or HasConditionalContinuationTrivia or
+             ((HasConditionalStartTrivia and (GetSpan.Start.Column > 1) and
+               SectionLeadsToBody)))) or
+           (IsMethodDirectiveStart and HasConditionalStartTrivia)) do
+    begin
+      LContDirs := nil;
+      case GetKeyword of
+        kwVar, kwType, kwConst, kwLabel:
+          begin
+            LContSave := FPos;
+            case GetKeyword of
+              kwVar: ParseVarSection(False).Free;
+              kwType: ParseTypeSection.Free;
+              kwConst: ParseConstSection.Free;
+            else
+              ParseLabelSection.Free;
+            end;
+            // A fresh {$IFDEF}-introduced section that is not followed by a
+            // body (begin/asm) belongs to the enclosing scope, not to this
+            // method body: backtrack so the section is parsed at module level.
+            if (not SectionLeadsToBody) and
+               (not HasConditionalContinuationTrivia) and
+               (not FDirectiveStmt) then
+            begin
+              FPos := LContSave;
+              FDirectiveStmt := False;
+              Break;
+            end;
+            // A body section following a directive-introduced declaration
+            // continues this body (the directive trivia sits on the section
+            // keyword token).
+            FDirectiveStmt := True;
+          end;
+        kwProcedure, kwFunction:
+          begin
+            // Nested routine inside a conditional body branch.
+            if IsKeyword(kwProcedure) then
+              ParseMethodHeader(prProcedure, cmNone, True).Free
+            else
+              ParseMethodHeader(prFunction, cmNone, True).Free;
+            FDirectiveStmt := True;
+          end;
+      else
+      begin
+        if IsMethodDirectiveStart then
+        begin
+          // A directive-only conditional branch (e.g. external ...).
+          LContDirs := TList<TDLDirective>.Create;
+          ParseMethodDirectivesAndSemicolons(LContDirs);
+          if IsSymbol(';') then
+            Advance;
+          LContDirs.Free;
+          FDirectiveStmt := False;
+        end
+        else
+        begin
+          if IsKeyword(kwAsm) then
+            ParseAsmStmt.Free
+          else
+            ParseCompoundStmt.Free;
+          ExpectSemicolon;
+          FDirectiveStmt := False;
+        end;
+      end;
+      end;
+    end;
     LImpl.LeadingTrivia.AddRange(LTrivia);
     Result := LImpl;
   end
@@ -2115,6 +2644,7 @@ begin
     kwVirtual, kwDynamic, kwOverride, kwAbstract, kwReintroduce, kwOverload,
     kwStatic, kwFinal, kwSealed, kwInline, kwAssembler, kwForward,
     kwPlatform, kwExperimental, kwVarargs, kwUnsafe, kwFar, kwNear,
+    kwNoReturn,
     kwRegister, kwPascal, kwCdecl, kwStdcall, kwSafecall:
       begin
         LDirective := TDLDirective.Create(GetSpan, MakeIdentifier);
@@ -2141,14 +2671,18 @@ begin
         LDirective := TDLDirective.Create(GetSpan, MakeIdentifier);
         ADirectives.Add(LDirective);
         if GetKind = tkString then
-          LDirective.Values.Add(ParseStringSequence);
+          LDirective.Values.Add(ParseStringSequence)
+        else if IsIdentifier or IsSoftNameKeyword then
+          // external <const-name> [name '...']  (the external library may be
+          // a constant, e.g. RTLHelperLibName)
+          LDirective.Values.Add(TDLIdentifierExpr.Create(GetSpan,
+            MakeIdentifier));
         if IsKeyword(kwName) then
         begin
           Advance;
-          if GetKind = tkString then
-            LDirective.Values.Add(ParseStringSequence)
-          else if IsIdentifier then
-            LDirective.Values.Add(TDLIdentifierExpr.Create(GetSpan, MakeIdentifier));
+          // name '_' + 'x'  or  name SomeConst  (expression handles string
+          // concatenation and identifiers).
+          LDirective.Values.Add(ParseExpression);
         end;
         if IsKeyword(kwIndex) then
         begin
@@ -2187,6 +2721,7 @@ begin
     kwVirtual, kwDynamic, kwOverride, kwAbstract, kwReintroduce, kwOverload,
     kwStatic, kwFinal, kwSealed, kwInline, kwAssembler, kwForward,
     kwPlatform, kwExperimental, kwVarargs, kwUnsafe, kwFar, kwNear,
+    kwNoReturn,
     kwRegister, kwPascal, kwCdecl, kwStdcall, kwSafecall, kwMessage,
     kwDeprecated, kwExternal:
       Result := True;
@@ -2260,6 +2795,8 @@ begin
       Advance;
     LProperty.ReadName := MakeIdentifier;
     LProperty.ReadIsFunc := True;
+    while HasConditionalStartTrivia and (IsIdentifier or IsSoftNameKeyword) do
+      MakeIdentifier.Free; // alternate branch: read {$IFNDEF X}A{$ELSE}B{$ENDIF}
   end;
   if IsKeyword(kwWrite) then
   begin
@@ -2268,6 +2805,8 @@ begin
       Advance;
     LProperty.WriteName := MakeIdentifier;
     LProperty.WriteIsFunc := True;
+    while HasConditionalStartTrivia and (IsIdentifier or IsSoftNameKeyword) do
+      MakeIdentifier.Free;
   end;
   if IsKeyword(kwStored) then
   begin
@@ -2310,6 +2849,20 @@ begin
   if IsKeyword(kwWriteOnly) then
     Advance;
   ExpectSemicolon;
+  // A default/nodefault directive may also follow the terminating semicolon
+  // (default array property marker: "property X: T read F; default;").
+  if IsKeyword(kwDefault) then
+  begin
+    Advance;
+    LProperty.IsDefault := True;
+    ExpectSemicolon;
+  end
+  else if IsKeyword(kwNodefault) then
+  begin
+    Advance;
+    LProperty.IsNodefault := True;
+    ExpectSemicolon;
+  end;
   Result := LProperty;
 end;
 
@@ -2327,6 +2880,7 @@ var
   LPrevPos: Integer;
 begin
   LStatements := TList<TDLStatement>.Create;
+  FDirectiveStmt := False;
   while GetKind <> tkEOF do
   begin
     LPrevPos := FPos;
@@ -2345,6 +2899,8 @@ begin
       LStatements.Add(TDLEmptyStmt.Create(GetSpan));
       Continue;
     end;
+    if HasConditionalStartTrivia then
+      FDirectiveStmt := True;
     LStatement := ParseStatement;
     if (FPos = LPrevPos) and (LStatement = nil) and (not IsSymbol(';')) then
       Advance; // resynchronise on an unexpected terminator/block keyword
@@ -2352,6 +2908,7 @@ begin
       LStatements.Add(LStatement);
     if IsSymbol(';') then
       Advance;
+    SkipConditionalExpressionBranches;
   end;
   Result := LStatements;
 end;
@@ -2378,7 +2935,20 @@ begin
   end;
   LKeyword := GetKeyword;
   case LKeyword of
-    kwBegin: Result := ParseCompoundStmt;
+    kwBegin:
+      if FDirectiveStmt or HasConditionalStartTrivia then
+      begin
+        // A begin introduced by a conditional-compilation directive
+        // ({$IFDEF}/{$ELSE}/{$ENDIF}) continues the enclosing block (the
+        // compiler evaluates conditionals; we parse every branch literally,
+        // so a second "begin" inside a conditional body is not a nested
+        // compound statement).
+        Advance;
+        FDirectiveStmt := False;
+        Result := nil;
+      end
+      else
+        Result := ParseCompoundStmt;
     kwIf: Result := ParseIfStmt;
     kwCase: Result := ParseCaseStmt;
     kwFor: Result := ParseForStmt;
@@ -2460,14 +3030,28 @@ begin
   LStart := GetSpan;
   ExpectKeyword(kwIf);
   LCondition := ParseExpression;
+  // if {$IFDEF A}x{$ELSE}y{$ENDIF} then  (condition over conditional
+  // branches; keep the first branch, skip the alternates)
+  while HasConditionalStartTrivia and
+        (IsIdentifier or IsSoftNameKeyword or
+         (GetKind in [tkInteger, tkString, tkFloat, tkCharCode]) or
+         IsKeyword(kwNot)) do
+  begin
+    ParseExpression.Free;
+    if IsKeyword(kwThen) then
+      Break;
+  end;
   ExpectKeyword(kwThen);
+  FDirectiveStmt := False; // do not leak the list's directive flag into the branch
   LThen := ParseStatement;
   LIf := TDLIfStmt.Create(LStart, LCondition, LThen);
   if IsKeyword(kwElse) then
   begin
     Advance;
+    FDirectiveStmt := False;
     LElse := ParseStatement;
     LIf.ElseBranch := LElse;
+    SkipConditionalExpressionBranches;
   end;
   Result := LIf;
 end;
@@ -2543,6 +3127,7 @@ begin
         Advance;
         Continue;
       end;
+      FDirectiveStmt := False;
       LSelector.Statement := ParseStatement;
       if FPos = LPrevPos then
         Advance; // resynchronise on an unexpected terminator
@@ -2560,16 +3145,44 @@ end;
 function TDLDelphiParser.IsCaseLabelStart: Boolean;
 var
   LKind: TDLTokenKind;
+  LIndex: Integer;
+  LDepth: Integer;
 begin
   LKind := GetKind;
   Result := False;
   if (LKind = tkInteger) or (LKind = tkString) or (LKind = tkCharCode) then
     Result := True
   else if LKind = tkIdentifier then
-    // An identifier is a case label only when followed by a selector
-    // separator/range/colon (never by ":=").
-    Result := IsSymbolAhead(',', 1) or IsSymbolAhead('..', 1) or
-      IsSymbolAhead(':', 1)
+  begin
+    // An identifier (optionally qualified: Enum.Member) is a case label when
+    // followed by a selector separator/range/colon (never by ":=").
+    LIndex := 1;
+    while (Peek(LIndex).Kind = tkSymbol) and (Peek(LIndex).Text = '.') do
+      Inc(LIndex, 2);
+    // Case label may be a call:  SizeOf(Byte):
+    if (Peek(LIndex).Kind = tkSymbol) and (Peek(LIndex).Text = '(') then
+    begin
+      LDepth := 0;
+      while (Peek(LIndex).Kind <> tkEOF) do
+      begin
+        if (Peek(LIndex).Kind = tkSymbol) and (Peek(LIndex).Text = '(') then
+          Inc(LDepth)
+        else if (Peek(LIndex).Kind = tkSymbol) and (Peek(LIndex).Text = ')') then
+        begin
+          Dec(LDepth);
+          if LDepth = 0 then
+          begin
+            Inc(LIndex);
+            Break;
+          end;
+        end;
+        Inc(LIndex);
+      end;
+    end;
+    Result := (Peek(LIndex).Kind = tkSymbol) and
+      ((Peek(LIndex).Text = ',') or (Peek(LIndex).Text = '..') or
+       (Peek(LIndex).Text = ':'));
+  end
   else if (LKind = tkSymbol) and (GetText = '-') and
           (Peek(1).Kind = tkInteger) then
     Result := True;
@@ -2636,6 +3249,7 @@ begin
     LFor.EndExpr := ParseExpression;
     ExpectKeyword(kwDo);
   end;
+  FDirectiveStmt := False;
   LFor.Body := ParseStatement;
   Result := LFor;
 end;
@@ -2651,6 +3265,7 @@ begin
   LCondition := ParseExpression;
   ExpectKeyword(kwDo);
   LWhile := TDLWhileStmt.Create(LStart, LCondition);
+  FDirectiveStmt := False;
   LWhile.Body := ParseStatement;
   Result := LWhile;
 end;
@@ -2695,6 +3310,7 @@ begin
       Break;
   end;
   ExpectKeyword(kwDo);
+  FDirectiveStmt := False;
   LWith.Body := ParseStatement;
   Result := LWith;
 end;
@@ -2739,6 +3355,7 @@ begin
         else if IsIdentifier then
           LHandler.TypeName := MakeIdentifier;
         ExpectKeyword(kwDo);
+        FDirectiveStmt := False;
         LHandler.Body := ParseStatement;
         LTry.OnHandlers.Add(LHandler);
       end
@@ -2862,6 +3479,7 @@ begin
     Result.Statement := TDLEmptyStmt.Create(GetSpan);
   end
   else
+    FDirectiveStmt := False;
     Result.Statement := ParseStatement;
 end;
 
@@ -2874,6 +3492,11 @@ begin
   ExpectKeyword(kwVar);
   LDecl := ParseVarDecl;
   Result := TDLVarDeclStmt.Create(LStart, LDecl);
+  // Conditional compilation can place several var declarations after a single
+  // var keyword inside a body; parse (and discard) any further declarations.
+  while (IsIdentifier or IsSoftNameKeyword) and
+        (IsSymbolAhead(':', 1) or IsSymbolAhead(',', 1)) do
+    ParseVarDecl.Free;
 end;
 
 { ------------------------------------------------------------------ }
@@ -3069,10 +3692,13 @@ begin
       if IsSymbol('>') then
       begin
         LNext := Peek(1);
-        if (LNext.Kind = tkSymbol) and
-           ((LNext.Text = '(') or (LNext.Text = ')') or (LNext.Text = ';') or
-            (LNext.Text = ':') or (LNext.Text = ',') or (LNext.Text = '=') or
-            (LNext.Text = '.') or (LNext.Text = '[') or (LNext.Text = ']')) then
+        if ((LNext.Kind = tkSymbol) and
+            ((LNext.Text = '(') or (LNext.Text = ')') or (LNext.Text = ';') or
+             (LNext.Text = ':') or (LNext.Text = ',') or (LNext.Text = '=') or
+             (LNext.Text = '.') or (LNext.Text = '[') or (LNext.Text = ']') or
+             (LNext.Text = '<>') or (LNext.Text = '<=') or
+             (LNext.Text = '>='))) or
+           (LNext.Kind = tkKeyword) then
         begin
           Advance; // '>'
           LOk := True;
@@ -3118,6 +3744,16 @@ begin
   while (GetKind <> tkEOF) and (not IsSymbol(')')) do
   begin
     LArgs.Add(ParseExpression);
+    // A call argument may contain a conditional-compilation type cast:
+    // ({$IFDEF A}TypeA{$ELSE}TypeB{$ENDIF}(value))  -- keep the first branch,
+    // parse (and discard) the alternates.
+    while HasDirectiveTrivia and
+          (IsIdentifier or IsSoftNameKeyword or
+           (GetKind in [tkString, tkInteger, tkFloat, tkCharCode])) do
+    begin
+      ParseExpression.Free;
+      Break; // the separator (',' or ')') is handled by the caller
+    end;
     if IsSymbol(',') then
       Advance
     else
@@ -3175,7 +3811,8 @@ begin
       kwInherited:
         begin
           Advance;
-          if (GetKind = tkIdentifier) or IsSymbol('(') then
+          if (GetKind = tkIdentifier) or IsSoftNameKeyword or
+             IsSymbol('(') then
             Result := TDLInheritedExpr.Create(LStart, ParsePostfix)
           else
             Result := TDLInheritedExpr.Create(LStart, nil);
@@ -3183,10 +3820,17 @@ begin
       kwProcedure, kwFunction:
         Result := ParseAnonymousMethod;
       kwReference:
+        if IsKwAhead(kwTo, 1) then
         begin
           Advance;
           ExpectKeyword(kwTo);
           Result := ParseAnonymousMethod;
+        end
+        else
+        begin
+          // 'Reference' used as a plain identifier (a variable/type name).
+          LName := MakeIdentifier;
+          Result := TDLIdentifierExpr.Create(LName.Span, LName);
         end;
       kwNot, kwAnd, kwOr, kwXor, kwDiv, kwMod, kwShl, kwShr, kwAs, kwIn, kwIs,
       kwTo, kwDownTo:

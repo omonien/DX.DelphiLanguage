@@ -139,9 +139,7 @@ begin
   LRoot := FindSpring4D;
   if LRoot = '' then
     Exit; // Spring4D submodule not checked out
-  LKnownCrashes := [
-    'Spring.Utils.IO.pas',
-    'Spring.Collections.Base.pas'];
+  LKnownCrashes := [];
   LOutcomes := ParseAllFiles(LRoot);
   LTotalErrors := 0;
   LTotalFiles := 0;
@@ -192,16 +190,11 @@ begin
   // under investigation). They are excluded from the no-crash assertion
   // until fixed; removing them from this list is the progress metric.
   LKnownCrashes := [
-    'Androidapi.JNIBridge.pas',
+    'System.IOUtils.pas',
     'System.Skia.API.pas',
-    'System.TypInfo.pas',
-    'System.VarCmplx.pas',
-    'iOsapi.AVFAudio.pas',
-    'Macapi.AddressBook.pas',
     'System.pas',
     'System-2026-05-22 11.50.05.pas',
-    'System.Variants.pas',
-    'Winapi.ShlObj.pas',
+    'System.SysUtils.pas',
     'Winapi.Windows.pas'];
   LTotalErrors := 0;
   LTotalFiles := 0;

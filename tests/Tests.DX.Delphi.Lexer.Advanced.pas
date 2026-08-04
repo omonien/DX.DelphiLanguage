@@ -372,8 +372,8 @@ begin
   LDiagnostics := TDLDiagnostics.Create;
   try
     // ''' + a + '''''' (6 quotes = 3 literal) + b + '''
-    LSource := StringOfChar('''', 3) + 'a' + StringOfChar('''', 6) + 'b' +
-      StringOfChar('''', 3);
+    LSource := StringOfChar('''', 3) + #13#10 + 'a' + StringOfChar('''', 6) +
+      'b' + #13#10 + StringOfChar('''', 3);
     LTokens := TokenizeToArray(LSource, LDiagnostics);
     Assert.AreEqual(0, LDiagnostics.Count);
     Assert.AreEqual('a' + StringOfChar('''', 3) + 'b', LTokens[0].Value);
@@ -390,8 +390,8 @@ begin
   LDiagnostics := TDLDiagnostics.Create;
   try
     // a run of 5 quotes is invalid (odd, > 3)
-    LSource := StringOfChar('''', 3) + 'a' + StringOfChar('''', 5) + 'b' +
-      StringOfChar('''', 3);
+    LSource := StringOfChar('''', 3) + #13#10 + 'a' + StringOfChar('''', 5) +
+      'b' + #13#10 + StringOfChar('''', 3);
     LexSource(LSource, LDiagnostics).Free;
     Assert.AreEqual('DLX-09', FirstErrorCode(LDiagnostics));
   finally
@@ -406,7 +406,7 @@ var
 begin
   LDiagnostics := TDLDiagnostics.Create;
   try
-    LSource := StringOfChar('''', 3) + 'never closed';
+    LSource := StringOfChar('''', 3) + #13#10 + 'never closed';
     LexSource(LSource, LDiagnostics).Free;
     Assert.AreEqual('DLX-09', FirstErrorCode(LDiagnostics));
   finally

@@ -79,7 +79,7 @@ type
     procedure ScanDirective;
     procedure ScanIdentifier;
     procedure ScanNumber;
-    procedure ScanString;
+    procedure ScanString(ADelimiter: Char);
     procedure ScanMultilineString;
     procedure ScanCharCode;
     procedure ScanSymbol;
@@ -335,17 +335,36 @@ end;
 procedure TDLDelphiLexer.ScanDirective;
 var
   LStart: TDLSourcePos;
+  LIsParenStyle: Boolean;
 begin
   LStart := GetCurrentPos;
-  Advance; // '{'
+  LIsParenStyle := GetCurChar = '(';
+  Advance; // '{' or '('
+  if LIsParenStyle then
+    Advance; // '*'
   Advance; // '$'
-  while (GetCurChar <> #0) and (GetCurChar <> '}') do
-    Advance;
-  if GetCurChar = '}' then
-    Advance
+  if LIsParenStyle then
+  begin
+    while (GetCurChar <> #0) do
+      if (GetCurChar = '*') and (GetCharAt(FOffset + 1) = ')') then
+      begin
+        Advance;
+        Advance;
+        Break;
+      end
+      else
+        Advance;
+  end
   else
-    FDiagnostics.Error('DLX-03', 'Unterminated compiler directive',
-      TDLSourceSpan.Create(LStart, GetCurrentPos));
+  begin
+    while (GetCurChar <> #0) and (GetCurChar <> '}') do
+      Advance;
+    if GetCurChar = '}' then
+      Advance
+    else
+      FDiagnostics.Error('DLX-03', 'Unterminated compiler directive',
+        TDLSourceSpan.Create(LStart, GetCurrentPos));
+  end;
   AddTrivia(trDirective, LStart);
 end;
 
@@ -486,7 +505,8 @@ begin
   else
   begin
     try
-      LToken.IntegerValue := StrToInt64(LDigits);
+      // Accept full 64-bit range (e.g. UInt64($FFFFFFFFFFFFFFFF)).
+      LToken.IntegerValue := Int64(StrToUInt64(LDigits));
     except
       on E: EConvertError do
         FDiagnostics.Error('DLX-07', 'Invalid integer literal "' + LDigits + '"',
@@ -495,7 +515,7 @@ begin
   end;
 end;
 
-procedure TDLDelphiLexer.ScanString;
+procedure TDLDelphiLexer.ScanString(ADelimiter: Char);
 var
   LStart: TDLSourcePos;
   LToken: TDLToken;
@@ -503,16 +523,16 @@ var
   LClosed: Boolean;
 begin
   LStart := GetCurrentPos;
-  Advance; // opening '
+  Advance; // opening delimiter
   LValue := '';
   LClosed := False;
   while GetCurChar <> #0 do
   begin
-    if GetCurChar = '''' then
+    if GetCurChar = ADelimiter then
     begin
-      if GetCharAt(FOffset + 1) = '''' then
+      if GetCharAt(FOffset + 1) = ADelimiter then
       begin
-        LValue := LValue + '''';
+        LValue := LValue + ADelimiter;
         Advance;
         Advance;
       end
@@ -555,6 +575,11 @@ begin
   Advance; // '''
   Advance;
   Advance;
+  // The opening delimiter's line break is not part of the content.
+  if GetCurChar = #13 then
+    Advance
+  else if GetCurChar = #10 then
+    Advance;
   LValue := '';
   LClosed := False;
   while GetCurChar <> #0 do
@@ -570,6 +595,12 @@ begin
         if LQuoteCount = 3 then
         begin
           // Closing delimiter.
+          // The line break immediately before the closing delimiter is not
+          // part of the content.
+          if (Length(LValue) > 0) and (LValue[Length(LValue)] = #10) then
+            Delete(LValue, Length(LValue), 1);
+          if (Length(LValue) > 0) and (LValue[Length(LValue)] = #13) then
+            Delete(LValue, Length(LValue), 1);
           Advance;
           Advance;
           Advance;
@@ -742,14 +773,28 @@ begin
         ScanBlockComment(LStart, trBlockComment);
     end
     else if (LChar = '(') and (GetCharAt(FOffset + 1) = '*') then
-      ScanBlockComment(LStart, trBlockComment)
+    begin
+      if GetCharAt(FOffset + 2) = '$' then
+        ScanDirective // (*$HPPEMIT ...*)  paren-style compiler directive
+      else
+        ScanBlockComment(LStart, trBlockComment);
+    end
     else if LChar = '''' then
     begin
       if (GetCharAt(FOffset + 1) = '''') and (GetCharAt(FOffset + 2) = '''') then
-        ScanMultilineString
+      begin
+        // '''' opens a multiline string only when followed by a line break;
+        // otherwise it is a normal string with '' escaping.
+        if CharInSet(GetCharAt(FOffset + 3), [#13, #10]) then
+          ScanMultilineString
+        else
+          ScanString('''');
+      end
       else
-        ScanString;
+        ScanString('''');
     end
+    else if LChar = '"' then
+      ScanString('"') // double-quoted characters in asm blocks
     else if LChar = '#' then
       ScanCharCode
     else if CharInSet(LChar, ['0'..'9']) then

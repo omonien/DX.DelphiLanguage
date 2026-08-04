@@ -305,8 +305,10 @@ var
 begin
   LDiagnostics := TDLDiagnostics.Create;
   try
-    LSource := StringOfChar('''', 3) + 'line1' + #13#10 + 'line2' +
-      StringOfChar('''', 3);
+    // The multiline delimiter ''' is recognised only when followed by a
+    // line break (verified against dcc32 37.0).
+    LSource := StringOfChar('''', 3) + #13#10 + 'line1' + #13#10 + 'line2' +
+      #13#10 + StringOfChar('''', 3);
     LTokens := TokenizeToArray(LSource, LDiagnostics);
     Assert.AreEqual(tkString, LTokens[0].Kind);
     Assert.AreEqual('line1'#13#10'line2', LTokens[0].Value);
@@ -324,8 +326,8 @@ begin
   LDiagnostics := TDLDiagnostics.Create;
   try
     // even quote runs inside a multiline string are literal quotes
-    LSource := StringOfChar('''', 3) + 'it' + StringOfChar('''', 4) + 's' +
-      StringOfChar('''', 3);
+    LSource := StringOfChar('''', 3) + #13#10 + 'it' + StringOfChar('''', 4) +
+      's' + #13#10 + StringOfChar('''', 3);
     LTokens := TokenizeToArray(LSource, LDiagnostics);
     Assert.AreEqual(tkString, LTokens[0].Kind);
     Assert.AreEqual('it''''s', LTokens[0].Value);

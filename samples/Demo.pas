@@ -27,8 +27,10 @@ const
   cExp = 1.5e10;
   cChar = #13#10;
   cSeq = 'a'#10'b'#9'c';
-  cMulti = '''line one
-line two''';
+  cMulti = '''
+line one
+line two
+''';
 
 resourcestring
   rsWelcome = 'Welcome';

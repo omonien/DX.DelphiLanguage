@@ -95,7 +95,8 @@ type
     kwFinalization, kwFinally, kwFor, kwForward, kwFunction, kwGoto,
     kwIf, kwImplementation, kwImplements, kwIn, kwIndex, kwInherited,
     kwInitialization, kwInline, kwInterface, kwIs, kwLabel, kwLibrary,
-    kwMessage, kwMod, kwNear, kwNil, kwNodefault, kwNot, kwObject, kwOf,
+    kwMessage, kwMod, kwNear, kwNil, kwNodefault, kwNoReturn, kwNot,
+    kwObject, kwOf,
     kwOr, kwOut, kwOverload, kwOverride, kwPackage, kwPacked, kwPascal,
     kwPlatform, kwPrivate, kwProcedure, kwProgram, kwProperty, kwProtected,
     kwPublic, kwPublished, kwRaise, kwRead, kwReadOnly, kwRecord, kwReference,
@@ -271,7 +272,7 @@ type
 
 const
   // Sorted alphabetically for binary search; used by TDLKeywords.
-  CDLKeywordTable: array[0..118] of TDLKeywordEntry = (
+  CDLKeywordTable: array[0..119] of TDLKeywordEntry = (
     (Name: 'absolute';    Keyword: kwAbsolute),
     (Name: 'abstract';    Keyword: kwAbstract),
     (Name: 'and';         Keyword: kwAnd),
@@ -333,6 +334,7 @@ const
     (Name: 'near';        Keyword: kwNear),
     (Name: 'nil';         Keyword: kwNil),
     (Name: 'nodefault';   Keyword: kwNodefault),
+    (Name: 'noreturn';    Keyword: kwNoReturn),
     (Name: 'not';         Keyword: kwNot),
     (Name: 'object';      Keyword: kwObject),
     (Name: 'of';          Keyword: kwOf),
