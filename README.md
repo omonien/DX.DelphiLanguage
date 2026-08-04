@@ -6,7 +6,7 @@ tree (CST)**, a cleaner **abstract syntax tree (AST)**, and a lowering pass that
 turns one into the other.
 
 The project consists of a library (`src/`) plus two console applications:
-`DLDemo` (lex → CST → AST dump) and `DLTests` (DUnitX unit tests).
+`DLDemo` (lex → CST → AST dump) and `DX.Delphi.Tests` (DUnitX unit tests).
 
 ---
 
@@ -157,19 +157,19 @@ contain errors.
 dcc32 -Q -CC -U"X:\DX.DelphiLanguage\src" -U"X:\DX.DelphiLanguage\libs\DUnitX\Source" \
       -N"X:\DX.DelphiLanguage\build\win32\Debug\dcu" \
       -E"X:\DX.DelphiLanguage\tests" \
-      -DDEBUG X:\DX.DelphiLanguage\tests\DLTests.dpr
+      -DDEBUG X:\DX.DelphiLanguage\tests\DX.Delphi.Tests.dpr
 
-DLTests.exe
+DX.Delphi.Tests.exe
 ```
 
 ### IDE / MSBuild
 
 Open `DX.DelphiLanguage.groupproj` in the IDE (contains `DLDemo` and
-`DLTests`), or build from the command line:
+`DX.Delphi.Tests`), or build from the command line:
 
 ```bash
 msbuild DLDemo.dproj /p:Config=Debug /p:Platform=Win32 /t:Build
-msbuild tests\DLTests.dproj /p:Config=Debug /p:Platform=Win32 /t:Build
+msbuild tests\DX.Delphi.Tests.dproj /p:Config=Debug /p:Platform=Win32 /t:Build
 ```
 
 Output goes to `build\$(Platform)\$(Config)\` (EXE) and

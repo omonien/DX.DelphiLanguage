@@ -1,15 +1,16 @@
 ﻿/// <summary>
-///   DLTests — DUnitX console runner for the DX.Delphi language model tests.
+///   DX.Delphi.Tests — DUnitX console runner for the DX.Delphi language model
+///   tests.
 /// </summary>
 /// <remarks>
-///   Build: dcc32 -U..\src -U..\libs\DUnitX\Source DLTests.dpr
+///   Build: dcc32 -U..\src -U..\libs\DUnitX\Source DX.Delphi.Tests.dpr
 ///   The runner auto-discovers [TestFixture] classes via RTTI from the units
 ///   listed in the uses clause.
 /// </remarks>
 /// <author>Olaf Monien</author>
 /// <created>2026-08-04</created>
 /// <license>MIT</license>
-program DLTests;
+program DX.Delphi.Tests;
 
 {$APPTYPE CONSOLE}
 {$R *.res}

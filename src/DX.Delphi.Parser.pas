@@ -75,6 +75,7 @@ type
     procedure Warning(const AMessage: string);
     function MakeIdentifier: TDLIdentifier;
     function MakeIdentifierFromToken(AToken: TDLToken): TDLIdentifier;
+    procedure ExpandDottedName(var AName: TDLIdentifier);
     function TakeTrivia(AToken: TDLToken; ANode: TDLNode): TDLNode;
     procedure TakeLeadingTrivia(ANode: TDLNode);
     function TakeTriviaCopy: TList<TDLTrivia>;
@@ -305,6 +306,26 @@ begin
     (Length(AToken.Text) > 0) and (AToken.Text[1] = '&'));
 end;
 
+procedure TDLDelphiParser.ExpandDottedName(var AName: TDLIdentifier);
+var
+  LFullName: string;
+begin
+  LFullName := AName.Name;
+  while IsSymbol('.') do
+  begin
+    Advance;
+    if IsIdentifier or (GetKind = tkKeyword) then
+    begin
+      AName.Free;
+      AName := MakeIdentifier;
+      LFullName := LFullName + '.' + AName.Name;
+    end
+    else
+      Error('Expected unit name segment after "."');
+  end;
+  AName.SetName(LFullName);
+end;
+
 function TDLDelphiParser.MakeIdentifier: TDLIdentifier;
 begin
   // Keywords are accepted as identifiers: Delphi treats many reserved words
@@ -401,6 +422,7 @@ begin
     Advance;
     LKind := pkProgram;
     LName := MakeIdentifier;
+    ExpandDottedName(LName);
     if IsSymbol('(') then
     begin
       Advance;
@@ -422,6 +444,7 @@ begin
     Advance;
     LKind := pkUnit;
     LName := MakeIdentifier;
+    ExpandDottedName(LName);
     ExpectSemicolon;
   end
   else if IsKeyword(kwLibrary) then
@@ -429,6 +452,7 @@ begin
     Advance;
     LKind := pkLibrary;
     LName := MakeIdentifier;
+    ExpandDottedName(LName);
     ExpectSemicolon;
   end
   else if IsKeyword(kwPackage) then
@@ -436,6 +460,7 @@ begin
     Advance;
     LKind := pkPackage;
     LName := MakeIdentifier;
+    ExpandDottedName(LName);
     ExpectSemicolon;
   end
   else
@@ -1813,10 +1838,13 @@ begin
   LClassModifier := cmNone;
   if IsKeyword(kwClass) then
   begin
-    if IsKwAhead(kwVar, 1) then
+    if IsKwAhead(kwVar, 1) or IsKwAhead(kwThreadvar, 1) then
     begin
       Advance; // class
-      ParseVarSection(False).Free; // TODO: class var section node
+      if IsKeyword(kwThreadvar) then
+        ParseVarSection(True).Free
+      else
+        ParseVarSection(False).Free; // TODO: class var section node
       Exit;
     end
     else if IsKwAhead(kwOperator, 1) then
@@ -3107,6 +3135,14 @@ var
   LExpression: TDLExpr;
 begin
   LStart := GetSpan;
+  if (GetKind = tkKeyword) and IsSoftNameKeyword then
+  begin
+    // Contextual keywords (index, name, on, at, break, ...) are identifiers
+    // in expression position.
+    LName := MakeIdentifier;
+    Result := TDLIdentifierExpr.Create(LName.Span, LName);
+    Exit;
+  end;
   case GetKind of
     tkInteger:
       begin

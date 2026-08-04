@@ -8,7 +8,7 @@
         <Projects Include="DLDemo.dproj">
             <Dependencies/>
         </Projects>
-        <Projects Include="tests\DLTests.dproj">
+        <Projects Include="tests\DX.Delphi.Tests.dproj">
             <Dependencies/>
         </Projects>
     </ItemGroup>

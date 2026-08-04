@@ -365,7 +365,7 @@ begin
     Advance;
   end;
   while (GetCurChar <> #0) and
-        (CharInSet(GetCurChar, ['_', '0'..'9']) or GetCurChar.IsLetter) do
+        (CharInSet(GetCurChar, ['_', '0'..'9', '&']) or GetCurChar.IsLetter) do
     Advance;
   LName := Copy(FSource, LStart.Offset + 1, FOffset - LStart.Offset);
   if (Length(LName) > 0) and (LName[1] = '&') then
