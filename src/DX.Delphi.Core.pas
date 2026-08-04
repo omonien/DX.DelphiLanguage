@@ -153,9 +153,11 @@ type
     FCode: string;
     FMessage: string;
     FSpan: TDLSourceSpan;
+    FFreed: Boolean;
   public
     constructor Create(ASeverity: TDLDiagnosticSeverity; const ACode,
       AMessage: string; ASpan: TDLSourceSpan);
+    destructor Destroy; override;
     property Severity: TDLDiagnosticSeverity read FSeverity;
     property Code: string read FCode;
     property Message: string read FMessage;
@@ -446,6 +448,7 @@ constructor TDLDiagnostic.Create(ASeverity: TDLDiagnosticSeverity; const ACode,
   AMessage: string; ASpan: TDLSourceSpan);
 begin
   inherited Create;
+  FFreed := False;
   FSeverity := ASeverity;
   FCode := ACode;
   FMessage := AMessage;
@@ -458,6 +461,14 @@ const
 begin
   Result := Format('%s [%s] at %s: %s',
     [CSeverity[FSeverity], FCode, FSpan.ToString, FMessage]);
+end;
+
+destructor TDLDiagnostic.Destroy;
+begin
+  if FFreed then
+    raise Exception.Create('DOUBLE-FREE detected: TDLDiagnostic ' + FCode);
+  FFreed := True;
+  inherited Destroy;
 end;
 
 { TDLDiagnostics }

@@ -30,10 +30,13 @@ uses
   Tests.DX.Delphi.Parser.Types in 'Tests.DX.Delphi.Parser.Types.pas',
   Tests.DX.Delphi.Parser.Members in 'Tests.DX.Delphi.Parser.Members.pas',
   Tests.DX.Delphi.Parser.Statements in 'Tests.DX.Delphi.Parser.Statements.pas',
+  Tests.DX.Delphi.Modules in 'Tests.DX.Delphi.Modules.pas',
+  Tests.DX.Delphi.Declarations in 'Tests.DX.Delphi.Declarations.pas',
   Tests.DX.Delphi.AstBuilder in 'Tests.DX.Delphi.AstBuilder.pas',
   Tests.DX.Delphi.Ast.Lowering in 'Tests.DX.Delphi.Ast.Lowering.pas',
   Tests.DX.Delphi.Diagnostics in 'Tests.DX.Delphi.Diagnostics.pas',
   Tests.DX.Delphi.Trivia in 'Tests.DX.Delphi.Trivia.pas',
+  Tests.DX.Delphi.RealWorld in 'Tests.DX.Delphi.RealWorld.pas',
   Tests.DX.Delphi.Samples in 'Tests.DX.Delphi.Samples.pas';
 
 var

@@ -22,8 +22,9 @@ The project consists of a library (`src/`) plus two console applications:
 | `src/DX.Delphi.AstBuilder.pas` | CST → AST lowering pass |
 | `DLDemo.dpr` | Console demo: dumps tokens, CST, AST, symbols, diagnostics |
 | `samples/Demo.pas` | Sample exercising the covered language surface |
-| `tests/` | DUnitX test project (146 tests) |
-| `libs/DUnitX` | DUnitX test framework (Git submodule) |
+| `tests/` | DUnitX test project (168 tests, incl. real-world fixtures) |
+| `libs/DUnitX` | DUnitX test framework (Git submodule, test-only) |
+| `libs/spring4d` | Spring4D sources — **test fixture only, NOT a dependency** |
 
 All source files are UTF-8 with BOM and CRLF line endings.
 
@@ -252,3 +253,33 @@ quote-run rules), `#` char codes (decimal/hex/binary), integers
 ## License
 
 MIT — see the unit headers. Copyright © 2026 Olaf Monien.
+
+---
+
+## Real-world parse fixtures (Spring4D + Delphi RTL)
+
+Two DUnitX fixtures (`Tests.DX.Delphi.RealWorld`) parse large real-world
+codebases through the lexer/parser as a robustness and regression net:
+
+- **Spring4D** (`libs/spring4d`, a Git submodule of the Spring4D source
+  mirror). It is used **only** as practical test input — it is **not** a
+  dependency of the DX.Delphi implementation. The library itself links
+  against nothing but the RTL.
+- **Delphi 13.1 RTL** (`C:\Program Files (x86)\Embarcadero\Studio\37.0\source\rtl`),
+  if the compiler is installed on the machine; the fixture skips gracefully
+  otherwise.
+
+Current status (tracked by the fixtures):
+
+| Corpus | Files | Result |
+|---|---|---|
+| Spring4D | 180 | parse without crashes; 92 505 diagnostics to reduce |
+| Delphi 13.1 RTL | 584 | parse without crashes; 323 944 diagnostics to reduce |
+
+The fixtures assert that **no file crashes or hangs the parser** (a handful
+of files with known deep-desync recursion issues are explicitly listed as
+known crashes and excluded from that assertion — removing them from the list
+is the progress metric). The remaining diagnostics are the measured distance
+to the goal of parsing Spring4D and the Delphi RTL **100 % error-free**. That
+claim will be made in this README only once the diagnostic count reaches
+zero; it is currently work in progress.

@@ -1,3 +1,6 @@
 [submodule "libs/DUnitX"]
 	path = libs/DUnitX
 	url = https://github.com/DelphiWorlds/DUnitX.git
+[submodule "libs/spring4d"]
+	path = libs/spring4d
+	url = https://github.com/VSoftTechnologies/Spring4DMirror.git

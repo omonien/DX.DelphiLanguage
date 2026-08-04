@@ -124,6 +124,7 @@
         <DCCReference Include="Tests.DX.Delphi.Ast.Lowering.pas"/>
         <DCCReference Include="Tests.DX.Delphi.Diagnostics.pas"/>
         <DCCReference Include="Tests.DX.Delphi.Trivia.pas"/>
+        <DCCReference Include="Tests.DX.Delphi.RealWorld.pas"/>
         <DCCReference Include="Tests.DX.Delphi.Samples.pas"/>
         <DCCReference Include="..\src\DX.Delphi.Core.pas"/>
         <DCCReference Include="..\src\DX.Delphi.Lexer.pas"/>

@@ -52,6 +52,9 @@ type
     FCurrentVisibility: TDLVisibility;
     FCurrentStrict: Boolean;
     FSuppressCount: Integer;
+    FSteps: Integer;
+    FCompoundGuard: Integer;
+    FStmtDepth: Integer;
     function GetCur: TDLToken;
     function GetKind: TDLTokenKind;
     function GetKeyword: TDLKeyword;
@@ -62,6 +65,7 @@ type
     function IsKeyword(AKeyword: TDLKeyword): Boolean;
     function IsKwAhead(AKeyword: TDLKeyword; AAhead: Integer): Boolean;
     function IsIdentifier: Boolean;
+    function IsSoftNameKeyword: Boolean;
     function IsSymbol(const ASymbol: string): Boolean;
     function IsSymbolAhead(const ASymbol: string; AAhead: Integer): Boolean;
     procedure ExpectSymbol(const ASymbol: string);
@@ -214,6 +218,10 @@ end;
 
 procedure TDLDelphiParser.Advance;
 begin
+  Inc(FSteps);
+  // Defensive guard against runaway loops on pathological input.
+  if FSteps > 50000000 then
+    raise Exception.Create('DLP-FATAL: parser step limit exceeded');
   if FPos < FTokens.Count - 1 then
     Inc(FPos);
 end;
@@ -232,6 +240,14 @@ end;
 function TDLDelphiParser.IsIdentifier: Boolean;
 begin
   Result := GetKind = tkIdentifier;
+end;
+
+function TDLDelphiParser.IsSoftNameKeyword: Boolean;
+begin
+  // Contextual (non-reserved) keywords that may legally appear as names.
+  Result := IsKeyword(kwIndex) or IsKeyword(kwName) or IsKeyword(kwOn) or
+    IsKeyword(kwAt) or IsKeyword(kwBreak) or IsKeyword(kwContinue) or
+    IsKeyword(kwRef) or IsKeyword(kwHelper) or IsKeyword(kwOperator);
 end;
 
 function TDLDelphiParser.IsSymbol(const ASymbol: string): Boolean;
@@ -525,8 +541,7 @@ begin
     begin
       LItem := ParseDeclItem(not LInInterface);
       if (FPos = LPrevPos) and (LItem = nil) then
-        raise Exception.Create('DLP-DEBUG: unit loop no progress at "' +
-          GetText + '"');
+        Advance; // resynchronise
       if LItem <> nil then
         LUnit.Items.Add(LItem)
       else
@@ -576,14 +591,14 @@ begin
   begin
     if IsSymbol(';') then
       Break;
-    if IsIdentifier then
+    if IsIdentifier or (GetKind = tkKeyword) then
     begin
       LName := MakeIdentifier;
       LFullName := LName.Name;
       while IsSymbol('.') do
       begin
         Advance;
-        if IsIdentifier then
+        if IsIdentifier or (GetKind = tkKeyword) then
         begin
           LName.Free;
           LName := MakeIdentifier;
@@ -680,8 +695,6 @@ begin
         end;
       end;
   else
-    if LAttributes <> nil then
-      LAttributes.Free;
     Error(Format('Unexpected "%s" at declaration level', [GetText]));
   end;
   if (LAttributes <> nil) and (LAttributes.Count > 0) then
@@ -722,8 +735,7 @@ begin
     else
       Break;
     if FPos = LPrevPos then
-      raise Exception.Create('DLP-DEBUG: type section no progress at "' +
-        GetText + '"');
+      Advance; // resynchronise
   end;
   Result := LSection;
 end;
@@ -829,8 +841,7 @@ begin
     else
       Break;
     if FPos = LPrevPos then
-      raise Exception.Create('DLP-DEBUG: const section no progress at "' +
-        GetText + '"');
+      Advance; // resynchronise
   end;
   Result := LSection;
 end;
@@ -877,7 +888,7 @@ begin
   ExpectKeyword(kwResourcestring);
   while GetKind <> tkEOF do
   begin
-    if IsIdentifier then
+    if IsIdentifier or IsSoftNameKeyword then
       LSection.Items.Add(ParseConstDecl)
     else
       Break;
@@ -899,13 +910,12 @@ begin
   while GetKind <> tkEOF do
   begin
     LPrevPos := FPos;
-    if IsIdentifier then
+    if IsIdentifier or IsSoftNameKeyword then
       LSection.Items.Add(ParseVarDecl)
     else
       Break;
     if FPos = LPrevPos then
-      raise Exception.Create('DLP-DEBUG: var section no progress at "' +
-        GetText + '"');
+      Advance; // resynchronise
   end;
   Result := LSection;
 end;
@@ -1041,7 +1051,7 @@ var
   LAttribute: TDLAttribute;
 begin
   LAttribute := TDLAttribute.Create(GetSpan);
-  while IsIdentifier do
+  while IsIdentifier or (GetKind = tkKeyword) do
   begin
     LAttribute.NamePath.Add(MakeIdentifier);
     if IsSymbol('.') then
@@ -1076,6 +1086,11 @@ var
   LBoundExpr: TDLExpr;
   LBoundHigh: TDLExpr;
 begin
+  Inc(FStmtDepth);
+  if FStmtDepth > 200 then
+    raise Exception.Create('DLP-FATAL: type recursion at "' + GetText +
+      '" line=' + IntToStr(GetSpan.Start.Line));
+  try
   LStart := GetSpan;
   LIsPacked := False;
   if IsKeyword(kwPacked) then
@@ -1235,6 +1250,9 @@ begin
     else if Result is TDLStaticArrayType then
       ; // packed static arrays carry no separate flag in our CST
   end;
+  finally
+    Dec(FStmtDepth);
+  end;
 end;
 
 function TDLDelphiParser.ParseNamedType: TDLNamedType;
@@ -1365,10 +1383,10 @@ begin
       LRecord.VariantPart := ParseVariantSection;
     end
     else
-      ParseMemberSection(LRecord.Members);
+      if not ParseMemberSection(LRecord.Members) then
+        Advance;
     if FPos = LPrevPos then
-      raise Exception.Create('DLP-DEBUG: record member loop no progress at "' +
-        GetText + '"');
+      Advance; // resynchronise
   end;
   ExpectKeyword(kwEnd);
   Result := LRecord;
@@ -1554,7 +1572,7 @@ begin
     ExpectSymbol(']');
   end;
   LMembers := TList<TDLMember>.Create;
-  if not LIsClassRef then
+  if (not LIsClassRef) and (not IsSymbol(';')) then
   begin
     FCurrentVisibility := vsPublished;
     FCurrentStrict := False;
@@ -1575,6 +1593,7 @@ var
   LStart: TDLSourceSpan;
   LKind: TDLProcKind;
   LType: TDLProceduralType;
+  LSavePos: Integer;
 begin
   LStart := GetSpan;
   if IsKeyword(kwFunction) then
@@ -1604,8 +1623,24 @@ begin
     ExpectKeyword(kwObject);
     LType.IsOfObject := True;
   end;
-  while ParseMethodDirectives(LType.Directives) do
-    ;
+  // Directives may follow the ';' (function(X): Integer; stdcall;). Only
+  // consume the ';' when a directive actually follows; otherwise leave it
+  // for the enclosing declaration parser.
+  while True do
+  begin
+    if IsSymbol(';') then
+    begin
+      LSavePos := FPos;
+      Advance;
+      if not IsMethodDirectiveStart then
+      begin
+        FPos := LSavePos;
+        Break;
+      end;
+    end;
+    if not ParseMethodDirectives(LType.Directives) then
+      Break;
+  end;
   Result := LType;
 end;
 
@@ -1705,7 +1740,7 @@ begin
     LAttributes.Clear;
     LAttributes.Free;
   end;
-  while IsIdentifier do
+  while IsIdentifier or (GetKind = tkKeyword) do
   begin
     LParam.Names.Add(MakeIdentifier);
     if IsSymbol(',') then
@@ -1853,7 +1888,7 @@ begin
     kwVar:
       begin
         Advance;
-        while IsIdentifier do
+        while IsIdentifier or IsSoftNameKeyword do
           AMembers.Add(ParseFieldDecl);
       end;
     kwType:
@@ -1868,7 +1903,7 @@ begin
         Result := False;
       end;
   else
-    if IsIdentifier then
+    if IsIdentifier or IsSoftNameKeyword then
       AMembers.Add(ParseFieldDecl)
     else
       Result := False;
@@ -2096,6 +2131,14 @@ begin
       end;
   else
     LText := GetText;
+    if IsIdentifier and (LowerCase(LText) = 'dispid') then
+    begin
+      LDirective := TDLDirective.Create(GetSpan, MakeIdentifier);
+      ADirectives.Add(LDirective);
+      LDirective.Values.Add(ParseExpression);
+      Result := True;
+      Exit;
+    end;
     if IsIdentifier and
        ((LowerCase(LText) = 'winapi') or (LowerCase(LText) = 'export') or
         (LowerCase(LText) = 'delayed') or (LowerCase(LText) = 'safecall')) then
@@ -2123,7 +2166,7 @@ begin
     LText := GetText;
     Result := IsIdentifier and
       ((LowerCase(LText) = 'winapi') or (LowerCase(LText) = 'export') or
-       (LowerCase(LText) = 'delayed'));
+       (LowerCase(LText) = 'delayed') or (LowerCase(LText) = 'dispid'));
   end;
 end;
 
@@ -2225,7 +2268,7 @@ begin
   if IsKeyword(kwImplements) then
   begin
     Advance;
-    while IsIdentifier do
+    while IsIdentifier or (GetKind = tkKeyword) do
     begin
       LProperty.Implements.Add(TDLIdentifierExpr.Create(GetSpan, MakeIdentifier));
       if IsSymbol(',') then
@@ -2276,8 +2319,7 @@ begin
     end;
     LStatement := ParseStatement;
     if (FPos = LPrevPos) and (LStatement = nil) and (not IsSymbol(';')) then
-      raise Exception.Create('DLP-DEBUG: ParseStatementList no progress at "' +
-        GetText + '"');
+      Advance; // resynchronise on an unexpected terminator/block keyword
     if LStatement <> nil then
       LStatements.Add(LStatement);
     if IsSymbol(';') then
@@ -2295,9 +2337,15 @@ var
   LLabelName: TDLIdentifier;
 begin
   LStart := GetSpan;
+  DLSetContext('stmt:' + GetText);
+  Inc(FStmtDepth);
+  if FStmtDepth > 200 then
+    raise Exception.Create('DLP-FATAL: statement recursion at "' + GetText +
+      '" line=' + IntToStr(GetSpan.Start.Line));
   if IsSymbol(';') then
   begin
     Result := TDLEmptyStmt.Create(LStart);
+    Dec(FStmtDepth);
     Exit;
   end;
   LKeyword := GetKeyword;
@@ -2350,6 +2398,7 @@ begin
         Result := TDLExprStmt.Create(LStart, LExpression);
     end;
   end;
+  Dec(FStmtDepth);
 end;
 
 function TDLDelphiParser.ParseCompoundStmt: TDLCompoundStmt;
@@ -2358,6 +2407,10 @@ var
   LStatements: TList<TDLStatement>;
   LStatement: TDLStatement;
 begin
+  Inc(FCompoundGuard);
+  if FCompoundGuard > 5000000 then
+    raise Exception.Create('DLP-FATAL: compound statement loop at "' +
+      GetText + '"');
   LCompound := TDLCompoundStmt.Create(GetSpan);
   ExpectKeyword(kwBegin);
   LStatements := ParseStatementList([kwEnd]);
@@ -2397,6 +2450,8 @@ var
   LSubject: TDLExpr;
   LCase: TDLCaseStmt;
   LSelector: TDLCaseSelector;
+  LPrevPos: Integer;
+  LGuard: Integer;
 begin
   LStart := GetSpan;
   ExpectKeyword(kwCase);
@@ -2409,14 +2464,21 @@ begin
     begin
       Advance;
       LCase.ElseBranch := TDLCompoundStmt.Create(GetSpan);
+      LGuard := 0;
       while (GetKind <> tkEOF) and (not IsKeyword(kwEnd)) do
       begin
+        Inc(LGuard);
+        if LGuard > 5000000 then
+          raise Exception.Create('DLP-FATAL: case else loop');
+        LPrevPos := FPos;
         if IsSymbol(';') then
         begin
           Advance;
           Continue;
         end;
         TDLCompoundStmt(LCase.ElseBranch).Statements.Add(ParseStatement);
+        if FPos = LPrevPos then
+          Advance; // resynchronise on an unexpected terminator
         if IsSymbol(';') then
           Advance;
       end;
@@ -2447,12 +2509,15 @@ begin
     while (GetKind <> tkEOF) and (not IsKeyword(kwEnd)) and
           (not IsKeyword(kwElse)) and (not IsCaseLabelStart) do
     begin
+      LPrevPos := FPos;
       if IsSymbol(';') then
       begin
         Advance;
         Continue;
       end;
       LSelector.Statement := ParseStatement;
+      if FPos = LPrevPos then
+        Advance; // resynchronise on an unexpected terminator
       if IsSymbol(';') then
         Advance;
       if LSelector.Statement is TDLCompoundStmt then
@@ -2614,10 +2679,15 @@ var
   LStatement: TDLStatement;
   LHandler: TDLOnHandler;
   LTypeName: TDLIdentifier;
+  LPrevPos: Integer;
 begin
+  Inc(FCompoundGuard);
+  if FCompoundGuard > 5000000 then
+    raise Exception.Create('DLP-FATAL: try statement loop at "' +
+      GetText + '"');
   LStart := GetSpan;
   ExpectKeyword(kwTry);
-  LStatements := ParseStatementList([kwExcept, kwFinally]);
+  LStatements := ParseStatementList([kwExcept, kwFinally, kwEnd]);
   LTry := TDLTryStmt.Create(LStart, IsKeyword(kwExcept));
   LTry.Body := TDLCompoundStmt.Create(LStart);
   for LStatement in LStatements do
@@ -2647,15 +2717,21 @@ begin
       else if IsKeyword(kwElse) then
       begin
         Advance;
+        Inc(FCompoundGuard);
+        if FCompoundGuard > 5000000 then
+          raise Exception.Create('DLP-FATAL: try-else loop');
         LTry.ElseBranch := TDLCompoundStmt.Create(GetSpan);
         while (GetKind <> tkEOF) and (not IsKeyword(kwEnd)) do
         begin
+          LPrevPos := FPos;
           if IsSymbol(';') then
           begin
             Advance;
             Continue;
           end;
           TDLCompoundStmt(LTry.ElseBranch).Statements.Add(ParseStatement);
+          if FPos = LPrevPos then
+            Advance; // resynchronise
           if IsSymbol(';') then
             Advance;
         end;
@@ -2674,15 +2750,21 @@ begin
   else
   begin
     Advance; // finally
+    Inc(FCompoundGuard);
+    if FCompoundGuard > 5000000 then
+      raise Exception.Create('DLP-FATAL: try-finally loop');
     LTry.FinallyBody := TDLCompoundStmt.Create(GetSpan);
     while (GetKind <> tkEOF) and (not IsKeyword(kwEnd)) do
     begin
+      LPrevPos := FPos;
       if IsSymbol(';') then
       begin
         Advance;
         Continue;
       end;
       TDLCompoundStmt(LTry.FinallyBody).Statements.Add(ParseStatement);
+      if FPos = LPrevPos then
+        Advance; // resynchronise
       if IsSymbol(';') then
         Advance;
     end;
@@ -2803,7 +2885,16 @@ end;
 
 function TDLDelphiParser.ParseExpression: TDLExpr;
 begin
-  Result := ParseBinary(0);
+  DLSetContext('expr:' + GetText);
+  Inc(FStmtDepth);
+  if FStmtDepth > 200 then
+    raise Exception.Create('DLP-FATAL: expression recursion at "' + GetText +
+      '" line=' + IntToStr(GetSpan.Start.Line));
+  try
+    Result := ParseBinary(0);
+  finally
+    Dec(FStmtDepth);
+  end;
 end;
 
 function TDLDelphiParser.ParseBinary(AMinPrec: Integer): TDLExpr;
@@ -2935,7 +3026,17 @@ begin
         if IsSymbol(',') then
           Advance
         else
+        begin
+          // Bound the speculation: real generic arguments are few. Abort
+          // once this limit is reached so 'a < b' comparisons never scan
+          // the rest of the file as type arguments.
+          if LTypeArgs.Count >= 12 then
+          begin
+            LOk := False;
+            Break;
+          end;
           LTypeArgs.Add(ParseTypeArg);
+        end;
       end;
       if IsSymbol('>') then
       begin
@@ -3064,8 +3165,23 @@ begin
       begin
         Advance;
         LExpression := ParseExpression;
-        ExpectSymbol(')');
-        Result := LExpression;
+        if IsSymbol(',') then
+        begin
+          // Parenthesized array constructor: (a, b, c).
+          Result := TDLArrayExpr.Create(LStart);
+          TDLArrayExpr(Result).Elements.Add(LExpression);
+          while IsSymbol(',') do
+          begin
+            Advance;
+            TDLArrayExpr(Result).Elements.Add(ParseExpression);
+          end;
+          ExpectSymbol(')');
+        end
+        else
+        begin
+          ExpectSymbol(')');
+          Result := LExpression;
+        end;
       end
       else if IsSymbol('[') then
         Result := ParseSetOrArrayConstructor
@@ -3169,7 +3285,21 @@ begin
     Advance;
     LMethod.ReturnType := ParseTypeExpr;
   end;
-  LMethod.Body := ParseCompoundStmt;
+  // Local declarations (var/label/const/type) before the body.
+  while IsKeyword(kwVar) or IsKeyword(kwLabel) or IsKeyword(kwConst) or
+        IsKeyword(kwType) do
+  begin
+    case GetKeyword of
+      kwVar: ParseVarSection(False).Free;
+      kwLabel: ParseLabelSection.Free;
+      kwConst: ParseConstSection.Free;
+      kwType: ParseTypeSection.Free;
+    end;
+  end;
+  if IsSymbol(';') then
+    Advance // declaration-style anonymous method without a body
+  else
+    LMethod.Body := ParseCompoundStmt;
   Result := LMethod;
 end;
 
@@ -3181,6 +3311,9 @@ begin
   FDiagnostics := ADiagnostics;
   FSource := ASource;
   FPos := 0;
+  FSteps := 0;
+  FCompoundGuard := 0;
+  FStmtDepth := 0;
   FSuppressCount := 0;
   FCurrentVisibility := vsPublished;
   FCurrentStrict := False;
@@ -3188,6 +3321,7 @@ end;
 
 function TDLDelphiParser.Parse: TDLCompilationUnit;
 begin
+  DLResetNodeCount;
   Result := ParseCompilationUnit;
 end;
 

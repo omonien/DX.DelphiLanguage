@@ -135,6 +135,7 @@ type
     FSpan: TDLSourceSpan;
     FLeadingTrivia: TList<TDLTrivia>;
     FTrailingTrivia: TList<TDLTrivia>;
+    FFreed: Boolean;
     function GetTriviaCount: Integer;
   public
     constructor Create(ASpan: TDLSourceSpan);
@@ -1295,7 +1296,16 @@ type
     property Body: TDLStatement read FBody write FBody;
   end;
 
+/// <summary>Resets the defensive node-count guard (called per top-level parse).</summary>
+procedure DLResetNodeCount;
+/// <summary>Sets the parser context reported by the node-count guard.</summary>
+procedure DLSetContext(const AText: string);
+
 implementation
+
+var
+  GDLNodeCount: Integer = 0;
+  GDLContext: string = '';
 
 const
   CProgramKindText: array[TDLProgramKind] of string = ('program', 'unit',
@@ -1329,13 +1339,33 @@ end;
 constructor TDLNode.Create(ASpan: TDLSourceSpan);
 begin
   inherited Create;
+  FFreed := False;
+  Inc(GDLNodeCount);
+  // Defensive guard against node-creation loops on pathological input.
+  if GDLNodeCount > 20000000 then
+    raise Exception.Create('DLP-FATAL: CST node limit exceeded at ' +
+      ClassName + ' (' + IntToStr(GDLNodeCount) + ') context=' + GDLContext);
   FSpan := ASpan;
   FLeadingTrivia := TList<TDLTrivia>.Create;
   FTrailingTrivia := TList<TDLTrivia>.Create;
 end;
 
+procedure DLResetNodeCount;
+begin
+  GDLNodeCount := 0;
+  GDLContext := '';
+end;
+
+procedure DLSetContext(const AText: string);
+begin
+  GDLContext := AText;
+end;
+
 destructor TDLNode.Destroy;
 begin
+  if FFreed then
+    raise Exception.Create('DOUBLE-FREE detected: ' + ClassName);
+  FFreed := True;
   FLeadingTrivia.Free;
   FTrailingTrivia.Free;
   inherited Destroy;

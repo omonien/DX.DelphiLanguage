@@ -48,6 +48,7 @@ type
     IntegerValue: Int64;      // decoded integer literal
     FloatValue: Double;       // decoded float literal
     LeadingTrivia: TList<TDLTrivia>; // trivia before this token (owned)
+    FFreed: Boolean;
     constructor Create(AKind: TDLTokenKind; const AText: string; ASpan: TDLSourceSpan);
     destructor Destroy; override;
     function IsTrivia: Boolean;
@@ -64,6 +65,7 @@ type
     FDiagnostics: TDLDiagnostics;
     FTokens: TObjectList<TDLToken>;
     FLeadingTrivia: TList<TDLTrivia>;
+    FSteps: Integer;
     function GetCurChar: Char;
     function GetCharAt(AOffset: Integer): Char;
     function GetCurrentPos: TDLSourcePos;
@@ -123,6 +125,7 @@ constructor TDLToken.Create(AKind: TDLTokenKind; const AText: string;
   ASpan: TDLSourceSpan);
 begin
   inherited Create;
+  FFreed := False;
   Kind := AKind;
   Text := AText;
   Span := ASpan;
@@ -131,6 +134,9 @@ end;
 
 destructor TDLToken.Destroy;
 begin
+  if FFreed then
+    raise Exception.Create('DOUBLE-FREE detected: TDLToken ' + Text);
+  FFreed := True;
   LeadingTrivia.Free;
   inherited Destroy;
 end;
@@ -168,6 +174,7 @@ begin
   FDiagnostics := ADiagnostics;
   FTokens := TObjectList<TDLToken>.Create(True);
   FLeadingTrivia := TList<TDLTrivia>.Create;
+  FSteps := 0;
 end;
 
 destructor TDLDelphiLexer.Destroy;
@@ -202,6 +209,10 @@ procedure TDLDelphiLexer.Advance;
 var
   LChar: Char;
 begin
+  Inc(FSteps);
+  // Defensive guard against runaway scan loops on pathological input.
+  if FSteps > 50000000 then
+    raise Exception.Create('DLX-FATAL: lexer step limit exceeded');
   if FOffset >= Length(FSource) then
     Exit;
   LChar := FSource[FOffset + 1];
