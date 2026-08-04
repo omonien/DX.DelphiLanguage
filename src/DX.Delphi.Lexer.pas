@@ -292,6 +292,14 @@ begin
       Advance;
       Dec(LDepth);
     end
+    else if LIsParenStyle and (GetCurChar = '(') and
+            (GetCharAt(FOffset + 1) = '*') then
+    begin
+      // nested (* ... *) comment
+      Advance;
+      Advance;
+      Inc(LDepth);
+    end
     else if (not LIsParenStyle) and (GetCurChar = '{') then
     begin
       // '{' inside a { } comment: nested comment. '{' is also the end marker
@@ -685,6 +693,8 @@ begin
     '^', '|':
       begin
         Advance;
+        if (GetCharAt(LStart.Offset) = '>') and (GetCurChar = '=') then
+          Advance; // '>=' comparison operator
         if (GetCharAt(LStart.Offset) = '.') and (GetCurChar = '.') then
           Advance; // '..' subrange/range operator
       end;

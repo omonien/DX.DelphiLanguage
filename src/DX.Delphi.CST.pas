@@ -483,7 +483,8 @@ type
     FIsNodefault: Boolean;
     FImplements: TList<TDLExpr>;
   public
-    constructor Create(ASpan: TDLSourceSpan; AName: TDLIdentifier);
+    constructor Create(ASpan: TDLSourceSpan; AName: TDLIdentifier;
+      AVisibility: TDLVisibility = vsNone);
     destructor Destroy; override;
     procedure Dump(ABuilder: TStringBuilder; AIndent: Integer); override;
     property Name: TDLIdentifier read FName;
@@ -546,12 +547,15 @@ type
   TDLMethodImpl = class(TDLProcedureBase)
   private
     FBody: TDLStatement;
+    FLocalDecls: TList<TDLNode>;
   public
     constructor Create(ASpan: TDLSourceSpan; AKind: TDLProcKind;
       AName: TDLIdentifier; AClassModifier: TDLClassModifier);
     destructor Destroy; override;
     procedure Dump(ABuilder: TStringBuilder; AIndent: Integer); override;
     property Body: TDLStatement read FBody write FBody;
+    /// <summary>Local var/label/const/type sections before the body.</summary>
+    property LocalDecls: TList<TDLNode> read FLocalDecls;
   end;
 
   /// <summary>A method directive (virtual, message N, external 'x', ...).</summary>
@@ -689,6 +693,7 @@ type
   private
     FName: TDLIdentifier;
     FTypeExpr: TDLTypeExpr;
+    FTypeParams: TList<TDLIdentifier>;
   public
     constructor Create(ASpan: TDLSourceSpan; AName: TDLIdentifier;
       ATypeExpr: TDLTypeExpr);
@@ -696,6 +701,8 @@ type
     procedure Dump(ABuilder: TStringBuilder; AIndent: Integer); override;
     property Name: TDLIdentifier read FName;
     property TypeExpr: TDLTypeExpr read FTypeExpr;
+    /// <summary>Generic type parameters (TList&lt;T&gt; -> [T]).</summary>
+    property TypeParams: TList<TDLIdentifier> read FTypeParams;
   end;
 
   /// <summary>type section (one or more TDLTypeDecl).</summary>
@@ -1927,9 +1934,10 @@ end;
 
 { TDLPropertyDecl }
 
-constructor TDLPropertyDecl.Create(ASpan: TDLSourceSpan; AName: TDLIdentifier);
+constructor TDLPropertyDecl.Create(ASpan: TDLSourceSpan; AName: TDLIdentifier;
+  AVisibility: TDLVisibility);
 begin
-  inherited Create(ASpan, vsNone, False);
+  inherited Create(ASpan, AVisibility, False);
   FName := AName;
   FIndexParams := TList<TDLParameter>.Create;
   FImplements := TList<TDLExpr>.Create;
@@ -2077,17 +2085,23 @@ constructor TDLMethodImpl.Create(ASpan: TDLSourceSpan; AKind: TDLProcKind;
   AName: TDLIdentifier; AClassModifier: TDLClassModifier);
 begin
   inherited Create(ASpan, AKind, AName, AClassModifier);
+  FLocalDecls := TList<TDLNode>.Create;
 end;
 
 destructor TDLMethodImpl.Destroy;
 begin
+  FLocalDecls.Free;
   FBody.Free;
   inherited Destroy;
 end;
 
 procedure TDLMethodImpl.Dump(ABuilder: TStringBuilder; AIndent: Integer);
+var
+  LDecl: TDLNode;
 begin
   DumpProcHeader(ABuilder, AIndent);
+  for LDecl in FLocalDecls do
+    LDecl.Dump(ABuilder, AIndent + 1);
   if FBody <> nil then
     FBody.Dump(ABuilder, AIndent + 1);
 end;
@@ -2346,18 +2360,35 @@ begin
   inherited Create(ASpan);
   FName := AName;
   FTypeExpr := ATypeExpr;
+  FTypeParams := TList<TDLIdentifier>.Create;
 end;
 
 destructor TDLTypeDecl.Destroy;
 begin
   FName.Free;
   FTypeExpr.Free;
+  FTypeParams.Free;
   inherited Destroy;
 end;
 
 procedure TDLTypeDecl.Dump(ABuilder: TStringBuilder; AIndent: Integer);
+var
+  LParam: TDLIdentifier;
+  LParams: string;
 begin
-  DumpHeader(ABuilder, AIndent, '%s =', [FName.Name]);
+  if FTypeParams.Count > 0 then
+  begin
+    LParams := '';
+    for LParam in FTypeParams do
+    begin
+      if LParams <> '' then
+        LParams := LParams + ', ';
+      LParams := LParams + LParam.Name;
+    end;
+    DumpHeader(ABuilder, AIndent, '%s<%s> =', [FName.Name, LParams]);
+  end
+  else
+    DumpHeader(ABuilder, AIndent, '%s =', [FName.Name]);
   FTypeExpr.Dump(ABuilder, AIndent + 1);
 end;
 

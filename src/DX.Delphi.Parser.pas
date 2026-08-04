@@ -72,6 +72,8 @@ type
     function MakeIdentifier: TDLIdentifier;
     function MakeIdentifierFromToken(AToken: TDLToken): TDLIdentifier;
     function TakeTrivia(AToken: TDLToken; ANode: TDLNode): TDLNode;
+    procedure TakeLeadingTrivia(ANode: TDLNode);
+    function TakeTriviaCopy: TList<TDLTrivia>;
     procedure SkipUntil(const AKeywords: array of TDLKeyword);
     procedure SkipToSemicolon;
 
@@ -310,6 +312,23 @@ begin
   for i := 0 to AToken.LeadingTrivia.Count - 1 do
     ANode.LeadingTrivia.Add(AToken.LeadingTrivia[i]);
   Result := ANode;
+end;
+
+procedure TDLDelphiParser.TakeLeadingTrivia(ANode: TDLNode);
+var
+  i: Integer;
+begin
+  for i := 0 to GetCur.LeadingTrivia.Count - 1 do
+    ANode.LeadingTrivia.Add(GetCur.LeadingTrivia[i]);
+end;
+
+function TDLDelphiParser.TakeTriviaCopy: TList<TDLTrivia>;
+var
+  i: Integer;
+begin
+  Result := TList<TDLTrivia>.Create;
+  for i := 0 to GetCur.LeadingTrivia.Count - 1 do
+    Result.Add(GetCur.LeadingTrivia[i]);
 end;
 
 procedure TDLDelphiParser.SkipUntil(const AKeywords: array of TDLKeyword);
@@ -665,6 +684,19 @@ begin
       LAttributes.Free;
     Error(Format('Unexpected "%s" at declaration level', [GetText]));
   end;
+  if (LAttributes <> nil) and (LAttributes.Count > 0) then
+  begin
+    if Result is TDLProcedureBase then
+    begin
+      TDLProcedureBase(Result).Attributes.AddRange(LAttributes);
+      LAttributes.Clear;
+    end
+    else if Result is TDLDeclItem then
+    begin
+      TDLDeclItem(Result).Attributes.AddRange(LAttributes);
+      LAttributes.Clear;
+    end;
+  end;
   if LAttributes <> nil then
     LAttributes.Free;
 end;
@@ -675,6 +707,7 @@ var
   LPrevPos: Integer;
 begin
   LSection := TDLTypeSection.Create(GetSpan, False);
+  TakeLeadingTrivia(LSection);
   ExpectKeyword(kwType);
   while GetKind <> tkEOF do
   begin
@@ -702,8 +735,11 @@ var
   LStart: TDLSourceSpan;
   LDecl: TDLTypeDecl;
   LParams: TList<TDLIdentifier>;
+  LTrivia: TList<TDLTrivia>;
 begin
   LStart := GetSpan;
+  LTrivia := TakeTriviaCopy;
+  try
   LName := MakeIdentifier;
   if IsSymbol('<') then
   begin
@@ -717,6 +753,9 @@ begin
       // from CST name; builder records them when needed).
       LDecl := TDLTypeDecl.Create(TDLSourceSpan.Create(LStart.Start,
         GetSpan.Stop), LName, LTypeExpr);
+      LDecl.LeadingTrivia.AddRange(LTrivia);
+      LDecl.TypeParams.AddRange(LParams);
+      LParams.Clear;
       LParams.Free;
       ExpectSemicolon;
       Result := LDecl;
@@ -733,8 +772,12 @@ begin
   LTypeExpr := ParseTypeExpr;
   LDecl := TDLTypeDecl.Create(TDLSourceSpan.Create(LStart.Start, GetSpan.Stop),
     LName, LTypeExpr);
+  LDecl.LeadingTrivia.AddRange(LTrivia);
   ExpectSemicolon;
   Result := LDecl;
+  finally
+    LTrivia.Free;
+  end;
 end;
 
 function TDLDelphiParser.ParseTypeParams(ANames: TList<TDLIdentifier>): Boolean;
@@ -776,6 +819,7 @@ var
   LPrevPos: Integer;
 begin
   LSection := TDLConstSection.Create(GetSpan);
+  TakeLeadingTrivia(LSection);
   ExpectKeyword(kwConst);
   while GetKind <> tkEOF do
   begin
@@ -797,6 +841,7 @@ var
   LName: TDLIdentifier;
 begin
   LDecl := TDLConstDecl.Create(GetSpan);
+  TakeLeadingTrivia(LDecl);
   while True do
   begin
     LName := MakeIdentifier;
@@ -828,6 +873,7 @@ var
   LSection: TDLResStringSection;
 begin
   LSection := TDLResStringSection.Create(GetSpan);
+  TakeLeadingTrivia(LSection);
   ExpectKeyword(kwResourcestring);
   while GetKind <> tkEOF do
   begin
@@ -845,6 +891,7 @@ var
   LPrevPos: Integer;
 begin
   LSection := TDLVarSection.Create(GetSpan, AIsThreadVar);
+  TakeLeadingTrivia(LSection);
   if AIsThreadVar then
     ExpectKeyword(kwThreadvar)
   else
@@ -869,6 +916,7 @@ var
   LName: TDLIdentifier;
 begin
   LDecl := TDLVarDecl.Create(GetSpan);
+  TakeLeadingTrivia(LDecl);
   while True do
   begin
     LName := MakeIdentifier;
@@ -895,6 +943,12 @@ begin
     Advance;
     LDecl.Init := ParseExpression;
   end;
+  if IsSymbol(':=') then
+  begin
+    // inline var initialization (var x := 42;)
+    Advance;
+    LDecl.Init := ParseExpression;
+  end;
   ExpectSemicolon;
   Result := LDecl;
 end;
@@ -904,6 +958,7 @@ var
   LSection: TDLLabelSection;
 begin
   LSection := TDLLabelSection.Create(GetSpan);
+  TakeLeadingTrivia(LSection);
   ExpectKeyword(kwLabel);
   while GetKind <> tkEOF do
   begin
@@ -928,6 +983,7 @@ var
   LItem: TDLExportItem;
 begin
   LSection := TDLExportsClause.Create(GetSpan);
+  TakeLeadingTrivia(LSection);
   ExpectKeyword(kwExports);
   while GetKind <> tkEOF do
   begin
@@ -1150,7 +1206,12 @@ begin
     if IsSymbol('(') then
       Result := ParseEnumOrSubrange
     else if (GetKind = tkIdentifier) or (GetKind = tkKeyword) then
-      Result := ParseNamedType
+    begin
+      if IsSymbolAhead('..', 1) then
+        Result := ParseSubrangeType
+      else
+        Result := ParseNamedType;
+    end
     else if (GetKind = tkInteger) or (GetKind = tkString) or
             (GetKind = tkCharCode) or
             (IsSymbol('-') and (Peek(1).Kind = tkInteger)) then
@@ -1585,6 +1646,22 @@ begin
       Advance;
       LModifier := pmConstRef;
     end
+    else if IsSymbol('[') then
+    begin
+      // const [Ref] A: Integer (Delphi 10.4+)
+      Advance;
+      if IsKeyword(kwRef) then
+      begin
+        Advance;
+        LModifier := pmConstRef;
+      end
+      else
+        LModifier := pmConst;
+      if IsSymbol(']') then
+        Advance
+      else
+        Error('Expected "]" after [Ref]');
+    end
     else
       LModifier := pmConst;
   end
@@ -1595,6 +1672,22 @@ begin
     begin
       Advance;
       LModifier := pmVarRef;
+    end
+    else if IsSymbol('[') then
+    begin
+      // var [Ref] B: Integer
+      Advance;
+      if IsKeyword(kwRef) then
+      begin
+        Advance;
+        LModifier := pmVarRef;
+      end
+      else
+        LModifier := pmVar;
+      if IsSymbol(']') then
+        Advance
+      else
+        Error('Expected "]" after [Ref]');
     end
     else
       LModifier := pmVar;
@@ -1794,6 +1887,7 @@ var
   LName: TDLIdentifier;
 begin
   LField := TDLFieldDecl.Create(GetSpan, FCurrentVisibility, FCurrentStrict, nil);
+  TakeLeadingTrivia(LField);
   while True do
   begin
     LName := MakeIdentifier;
@@ -1819,8 +1913,11 @@ var
   LImpl: TDLMethodImpl;
   LIsClassOperator: Boolean;
   LFullName: string;
+  LTrivia: TList<TDLTrivia>;
 begin
   LStart := GetSpan;
+  LTrivia := TakeTriviaCopy;
+  try
   if AKind = prOperator then
     LIsClassOperator := True
   else
@@ -1863,6 +1960,28 @@ begin
     end;
     LName.SetName(LFullName);
   end;
+  // Generic method type parameters (procedure TCls.DoIt<T>(...)).
+  if IsSymbol('<') then
+  begin
+    Advance;
+    while (GetKind <> tkEOF) and (not IsSymbol('>')) do
+    begin
+      if IsSymbol(',') then
+        Advance
+      else if IsIdentifier or (GetKind = tkKeyword) then
+        MakeIdentifier
+      else if IsSymbol(':') then
+      begin
+        Advance;
+        while (GetKind <> tkEOF) and (not IsSymbol(',')) and
+              (not IsSymbol('>')) do
+          Advance;
+      end
+      else
+        Advance;
+    end;
+    ExpectSymbol('>');
+  end;
   LHeader := TDLMethodDecl.Create(LStart, AKind, LName, AClassModifier);
   if IsSymbol('(') then
     LHeader.Params.AddRange(ParseParameterList);
@@ -1895,10 +2014,10 @@ begin
           IsKeyword(kwType) do
     begin
       case GetKeyword of
-        kwVar: ParseVarSection(False).Free;
-        kwLabel: ParseLabelSection.Free;
-        kwConst: ParseConstSection.Free;
-        kwType: ParseTypeSection.Free;
+        kwVar: LImpl.LocalDecls.Add(ParseVarSection(False));
+        kwLabel: LImpl.LocalDecls.Add(ParseLabelSection);
+        kwConst: LImpl.LocalDecls.Add(ParseConstSection);
+        kwType: LImpl.LocalDecls.Add(ParseTypeSection);
       end;
     end;
     if IsKeyword(kwAsm) then
@@ -1906,10 +2025,17 @@ begin
     else
       LImpl.Body := ParseCompoundStmt;
     ExpectSemicolon;
+    LImpl.LeadingTrivia.AddRange(LTrivia);
     Result := LImpl;
   end
   else
+  begin
+    LHeader.LeadingTrivia.AddRange(LTrivia);
     Result := LHeader;
+  end;
+  finally
+    LTrivia.Free;
+  end;
 end;
 
 function TDLDelphiParser.ParseMethodDirectives(
@@ -2032,7 +2158,8 @@ var
 begin
   ExpectKeyword(kwProperty);
   LName := MakeIdentifier;
-  LProperty := TDLPropertyDecl.Create(GetSpan, LName);
+  LProperty := TDLPropertyDecl.Create(GetSpan, LName, FCurrentVisibility);
+  TakeLeadingTrivia(LProperty);
   // indexed property parameters
   if IsSymbol('[') then
   begin
@@ -2089,8 +2216,8 @@ begin
     Advance;
     LProperty.DefaultValue := ParseExpression;
     LProperty.IsDefault := True;
-  end
-  else if IsKeyword(kwNodefault) then
+  end;
+  if IsKeyword(kwNodefault) then
   begin
     Advance;
     LProperty.IsNodefault := True;

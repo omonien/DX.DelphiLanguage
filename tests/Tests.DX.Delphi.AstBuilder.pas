@@ -117,10 +117,13 @@ begin
     try
       Assert.AreEqual(2, LModule.Declarations.Count);
       Assert.IsTrue(LModule.Declarations[0] is TDLConstDecl);
-      Assert.AreEqual('1', TDLConstDecl(LModule.Declarations[0]).Value);
+      Assert.IsNotNull(TDLConstDecl(LModule.Declarations[0]).Value);
+      Assert.IsTrue(TDLConstDecl(LModule.Declarations[0]).Value
+        is TDLNumberExpr);
       Assert.IsTrue(LModule.Declarations[1] is TDLVarDecl);
       Assert.AreEqual('Integer', TDLVarDecl(LModule.Declarations[1]).TypeName);
-      Assert.AreEqual('5', TDLVarDecl(LModule.Declarations[1]).Init);
+      Assert.IsNotNull(TDLVarDecl(LModule.Declarations[1]).Init);
+      Assert.IsTrue(TDLVarDecl(LModule.Declarations[1]).Init is TDLNumberExpr);
     finally
       LModule.Free;
     end;

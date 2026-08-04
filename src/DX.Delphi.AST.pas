@@ -210,6 +210,7 @@ type
     FHasBody: Boolean;
     FDirectives: TList<string>;
     FOperatorName: string;
+    FLocalDeclarations: TList<TDLDeclaration>;
   public
     constructor Create(ASpan: TDLSourceSpan; AKind: TDLProcKind;
       const AName: string; AIsClass: Boolean; AVisibility: TDLVisibility);
@@ -225,6 +226,8 @@ type
     property HasBody: Boolean read FHasBody write FHasBody;
     property Directives: TList<string> read FDirectives;
     property OperatorName: string read FOperatorName write FOperatorName;
+    /// <summary>Local declarations (vars/labels/consts/types) of the body.</summary>
+    property LocalDeclarations: TList<TDLDeclaration> read FLocalDeclarations;
   end;
 
   /// <summary>A property declaration.</summary>
@@ -237,8 +240,8 @@ type
     FWriteName: string;
     FStoredName: string;
     FIsDefault: Boolean;
-    FDefaultValue: string;
-    FIndexExpr: string;
+    FDefaultValue: TDLExpr;
+    FIndexExpr: TDLExpr;
   public
     constructor Create(ASpan: TDLSourceSpan; const AName: string;
       AVisibility: TDLVisibility);
@@ -251,8 +254,8 @@ type
     property WriteName: string read FWriteName write FWriteName;
     property StoredName: string read FStoredName write FStoredName;
     property IsDefault: Boolean read FIsDefault write FIsDefault;
-    property DefaultValue: string read FDefaultValue write FDefaultValue;
-    property IndexExpr: string read FIndexExpr write FIndexExpr;
+    property DefaultValue: TDLExpr read FDefaultValue write FDefaultValue;
+    property IndexExpr: TDLExpr read FIndexExpr write FIndexExpr;
   end;
 
   /// <summary>A record variant part.</summary>
@@ -450,7 +453,7 @@ type
     FNames: TList<string>;
     FMode: TDLParamMode;
     FTypeName: string;
-    FDefault: string;
+    FDefault: TDLExpr;
   public
     constructor Create(ASpan: TDLSourceSpan; AMode: TDLParamMode);
     destructor Destroy; override;
@@ -458,7 +461,7 @@ type
     property Names: TList<string> read FNames;
     property Mode: TDLParamMode read FMode;
     property TypeName: string read FTypeName write FTypeName;
-    property DefaultValue: string read FDefault write FDefault;
+    property DefaultValue: TDLExpr read FDefault write FDefault;
   end;
 
   /// <summary>Type declaration (Name = TypeDef).</summary>
@@ -480,14 +483,14 @@ type
   private
     FNames: TList<string>;
     FTypeName: string;
-    FValue: string;
+    FValue: TDLExpr;
   public
     constructor Create(ASpan: TDLSourceSpan);
     destructor Destroy; override;
     procedure Dump(ABuilder: TStringBuilder; AIndent: Integer); override;
     property Names: TList<string> read FNames;
     property TypeName: string read FTypeName write FTypeName;
-    property Value: string read FValue write FValue;
+    property Value: TDLExpr read FValue write FValue;
   end;
 
   /// <summary>Variable declaration(s).</summary>
@@ -495,8 +498,8 @@ type
   private
     FNames: TList<string>;
     FTypeName: string;
-    FInit: string;
-    FAbsoluteOf: string;
+    FInit: TDLExpr;
+    FAbsoluteOf: TDLExpr;
     FIsThreadVar: Boolean;
   public
     constructor Create(ASpan: TDLSourceSpan; AIsThreadVar: Boolean);
@@ -504,8 +507,8 @@ type
     procedure Dump(ABuilder: TStringBuilder; AIndent: Integer); override;
     property Names: TList<string> read FNames;
     property TypeName: string read FTypeName write FTypeName;
-    property Init: string read FInit write FInit;
-    property AbsoluteOf: string read FAbsoluteOf write FAbsoluteOf;
+    property Init: TDLExpr read FInit write FInit;
+    property AbsoluteOf: TDLExpr read FAbsoluteOf write FAbsoluteOf;
     property IsThreadVar: Boolean read FIsThreadVar;
   end;
 
@@ -530,6 +533,7 @@ type
     FBody: TList<TDLStmt>;
     FHasBody: Boolean;
     FDirectives: TList<string>;
+    FLocalDeclarations: TList<TDLDeclaration>;
   public
     constructor Create(ASpan: TDLSourceSpan; AKind: TDLProcKind;
       const AName: string; AIsClass: Boolean);
@@ -543,6 +547,8 @@ type
     property Body: TList<TDLStmt> read FBody;
     property HasBody: Boolean read FHasBody write FHasBody;
     property Directives: TList<string> read FDirectives;
+    /// <summary>Local declarations (vars/labels/consts/types) of the body.</summary>
+    property LocalDeclarations: TList<TDLDeclaration> read FLocalDeclarations;
   end;
 
   /// <summary>Export item.</summary>
@@ -815,14 +821,14 @@ type
   private
     FNames: TList<string>;
     FTypeName: string;
-    FInit: string;
+    FInit: TDLExpr;
   public
     constructor Create(ASpan: TDLSourceSpan);
     destructor Destroy; override;
     procedure Dump(ABuilder: TStringBuilder; AIndent: Integer); override;
     property Names: TList<string> read FNames;
     property TypeName: string read FTypeName write FTypeName;
-    property Init: string read FInit write FInit;
+    property Init: TDLExpr read FInit write FInit;
   end;
 
   /// <summary>Empty statement.</summary>
@@ -1029,6 +1035,84 @@ const
   CVisibilityText: array[TDLVisibility] of string = ('', 'private',
     'protected', 'public', 'published', 'automated');
 
+/// <summary>Renders an AST expression to compact source-like text.</summary>
+function DLExprText(AExpr: TDLExpr): string;
+var
+  LBinary: TDLBinaryExpr;
+  LUnary: TDLUnaryExpr;
+  LCall: TDLCallExpr;
+  LMember: TDLMemberExpr;
+  LIndex: TDLIndexExpr;
+  LGeneric: TDLGenericInstExpr;
+  i: Integer;
+begin
+  if AExpr = nil then
+    Exit('');
+  if AExpr is TDLIdentExpr then
+    Result := TDLIdentExpr(AExpr).Name
+  else if AExpr is TDLNumberExpr then
+    Result := TDLNumberExpr(AExpr).Value
+  else if AExpr is TDLStringExpr then
+    Result := '''' + StringReplace(TDLStringExpr(AExpr).Value, '''', '''''',
+      [rfReplaceAll]) + ''''
+  else if AExpr is TDLNilExpr then
+    Result := 'nil'
+  else if AExpr is TDLBinaryExpr then
+  begin
+    LBinary := TDLBinaryExpr(AExpr);
+    Result := DLExprText(LBinary.Left) + ' ' + LBinary.OperatorText + ' ' +
+      DLExprText(LBinary.Right);
+  end
+  else if AExpr is TDLUnaryExpr then
+  begin
+    LUnary := TDLUnaryExpr(AExpr);
+    Result := LUnary.OperatorText + DLExprText(LUnary.Operand);
+  end
+  else if AExpr is TDLCallExpr then
+  begin
+    LCall := TDLCallExpr(AExpr);
+    Result := DLExprText(LCall.Callee) + '(';
+    for i := 0 to LCall.Args.Count - 1 do
+    begin
+      if i > 0 then
+        Result := Result + ', ';
+      Result := Result + DLExprText(LCall.Args[i]);
+    end;
+    Result := Result + ')';
+  end
+  else if AExpr is TDLMemberExpr then
+  begin
+    LMember := TDLMemberExpr(AExpr);
+    Result := DLExprText(LMember.Target) + '.' + LMember.Member;
+  end
+  else if AExpr is TDLIndexExpr then
+  begin
+    LIndex := TDLIndexExpr(AExpr);
+    Result := DLExprText(LIndex.Target) + '[';
+    for i := 0 to LIndex.Indices.Count - 1 do
+    begin
+      if i > 0 then
+        Result := Result + ', ';
+      Result := Result + DLExprText(LIndex.Indices[i]);
+    end;
+    Result := Result + ']';
+  end
+  else if AExpr is TDLGenericInstExpr then
+  begin
+    LGeneric := TDLGenericInstExpr(AExpr);
+    Result := DLExprText(LGeneric.Target) + '<' +
+      String.Join(', ', LGeneric.TypeArgs.ToArray) + '>';
+  end
+  else if AExpr is TDLSetExpr then
+    Result := '[set]'
+  else if AExpr is TDLArrayExpr then
+    Result := '[array]'
+  else if AExpr is TDLInheritedExpr then
+    Result := 'inherited'
+  else
+    Result := '?';
+end;
+
 { TDLNode }
 
 constructor TDLNode.Create(ASpan: TDLSourceSpan);
@@ -1197,6 +1281,7 @@ begin
   FParams := TList<TDLParam>.Create;
   FBody := TList<TDLStmt>.Create;
   FDirectives := TList<string>.Create;
+  FLocalDeclarations := TList<TDLDeclaration>.Create;
 end;
 
 destructor TDLMethod.Destroy;
@@ -1204,6 +1289,7 @@ begin
   FParams.Free;
   FBody.Free;
   FDirectives.Free;
+  FLocalDeclarations.Free;
   inherited Destroy;
 end;
 
@@ -1212,6 +1298,7 @@ var
   LParam: TDLParam;
   LStmt: TDLStmt;
   LDirective: string;
+  LDecl: TDLDeclaration;
 begin
   if FIsClass then
     DumpHeader(ABuilder, AIndent, '%s %s (class)', [CProcKindText[FKind], FName])
@@ -1223,6 +1310,12 @@ begin
     TDLDump.Line(ABuilder, AIndent, '  : %s', [FReturnType]);
   for LDirective in FDirectives do
     TDLDump.Line(ABuilder, AIndent, '  directive %s', [LDirective]);
+  if FLocalDeclarations.Count > 0 then
+  begin
+    TDLDump.Line(ABuilder, AIndent, '  locals');
+    for LDecl in FLocalDeclarations do
+      LDecl.Dump(ABuilder, AIndent + 1);
+  end;
   if FHasBody then
   begin
     TDLDump.Line(ABuilder, AIndent, '  begin');
@@ -1244,6 +1337,8 @@ end;
 destructor TDLProperty.Destroy;
 begin
   FIndexParams.Free;
+  FDefaultValue.Free;
+  FIndexExpr.Free;
   inherited Destroy;
 end;
 
@@ -1259,7 +1354,7 @@ begin
   if FWriteName <> '' then
     TDLDump.Line(ABuilder, AIndent, '  write %s', [FWriteName]);
   if FIsDefault then
-    TDLDump.Line(ABuilder, AIndent, '  default %s', [FDefaultValue]);
+    TDLDump.Line(ABuilder, AIndent, '  default %s', [DLExprText(FDefaultValue)]);
 end;
 
 { TDLVariantPart }
@@ -1564,6 +1659,7 @@ end;
 destructor TDLParam.Destroy;
 begin
   FNames.Free;
+  FDefault.Free;
   inherited Destroy;
 end;
 
@@ -1571,7 +1667,7 @@ procedure TDLParam.Dump(ABuilder: TStringBuilder; AIndent: Integer);
 begin
   DumpHeader(ABuilder, AIndent, '%s %s : %s%s',
     [CParamModeText[FMode], String.Join(', ', FNames.ToArray), FTypeName,
-     IfThen(FDefault <> '', ' = ' + FDefault, '')]);
+     IfThen(FDefault <> nil, ' = ' + DLExprText(FDefault), '')]);
 end;
 
 { TDLTypeDecl }
@@ -1607,14 +1703,16 @@ end;
 destructor TDLConstDecl.Destroy;
 begin
   FNames.Free;
+  FValue.Free;
   inherited Destroy;
 end;
 
 procedure TDLConstDecl.Dump(ABuilder: TStringBuilder; AIndent: Integer);
 begin
-  DumpHeader(ABuilder, AIndent, 'const %s%s = %s',
-    [String.Join(', ', FNames.ToArray), IfThen(FTypeName <> '', ' : ' + FTypeName, ''),
-     FValue]);
+  DumpHeader(ABuilder, AIndent, 'const %s%s%s',
+    [String.Join(', ', FNames.ToArray),
+     IfThen(FTypeName <> '', ' : ' + FTypeName, ''),
+     IfThen(FValue <> nil, ' = ' + DLExprText(FValue), '')]);
 end;
 
 { TDLVarDecl }
@@ -1629,6 +1727,8 @@ end;
 destructor TDLVarDecl.Destroy;
 begin
   FNames.Free;
+  FInit.Free;
+  FAbsoluteOf.Free;
   inherited Destroy;
 end;
 
@@ -1637,8 +1737,8 @@ begin
   DumpHeader(ABuilder, AIndent, '%s %s : %s%s%s',
     [IfThen(FIsThreadVar, 'threadvar', 'var'),
      String.Join(', ', FNames.ToArray), FTypeName,
-     IfThen(FAbsoluteOf <> '', ' absolute ' + FAbsoluteOf, ''),
-     IfThen(FInit <> '', ' = ' + FInit, '')]);
+     IfThen(FAbsoluteOf <> nil, ' absolute ' + DLExprText(FAbsoluteOf), ''),
+     IfThen(FInit <> nil, ' = ' + DLExprText(FInit), '')]);
 end;
 
 { TDLLabelDecl }
@@ -1666,6 +1766,7 @@ begin
   FParams := TList<TDLParam>.Create;
   FBody := TList<TDLStmt>.Create;
   FDirectives := TList<string>.Create;
+  FLocalDeclarations := TList<TDLDeclaration>.Create;
 end;
 
 destructor TDLProcDecl.Destroy;
@@ -1673,6 +1774,7 @@ begin
   FParams.Free;
   FBody.Free;
   FDirectives.Free;
+  FLocalDeclarations.Free;
   inherited Destroy;
 end;
 
@@ -1681,6 +1783,7 @@ var
   LParam: TDLParam;
   LStmt: TDLStmt;
   LDirective: string;
+  LDecl: TDLDeclaration;
 begin
   DumpHeader(ABuilder, AIndent, '%s %s', [CProcKindText[FKind], FName]);
   for LParam in FParams do
@@ -1689,6 +1792,12 @@ begin
     TDLDump.Line(ABuilder, AIndent, '  : %s', [FReturnType]);
   for LDirective in FDirectives do
     TDLDump.Line(ABuilder, AIndent, '  directive %s', [LDirective]);
+  if FLocalDeclarations.Count > 0 then
+  begin
+    TDLDump.Line(ABuilder, AIndent, '  locals');
+    for LDecl in FLocalDeclarations do
+      LDecl.Dump(ABuilder, AIndent + 1);
+  end;
   if FHasBody then
   begin
     TDLDump.Line(ABuilder, AIndent, '  begin');
@@ -2149,13 +2258,14 @@ end;
 destructor TDLVarDeclStmt.Destroy;
 begin
   FNames.Free;
+  FInit.Free;
   inherited Destroy;
 end;
 
 procedure TDLVarDeclStmt.Dump(ABuilder: TStringBuilder; AIndent: Integer);
 begin
   DumpHeader(ABuilder, AIndent, 'var %s : %s = %s',
-    [String.Join(', ', FNames.ToArray), FTypeName, FInit]);
+    [String.Join(', ', FNames.ToArray), FTypeName, DLExprText(FInit)]);
 end;
 
 { TDLEmptyStmt }

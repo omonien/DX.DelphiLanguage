@@ -115,8 +115,15 @@
         <DCCReference Include="Tests.DX.Delphi.Support.pas"/>
         <DCCReference Include="Tests.DX.Delphi.Core.pas"/>
         <DCCReference Include="Tests.DX.Delphi.Lexer.pas"/>
+        <DCCReference Include="Tests.DX.Delphi.Lexer.Advanced.pas"/>
         <DCCReference Include="Tests.DX.Delphi.Parser.pas"/>
+        <DCCReference Include="Tests.DX.Delphi.Parser.Types.pas"/>
+        <DCCReference Include="Tests.DX.Delphi.Parser.Members.pas"/>
+        <DCCReference Include="Tests.DX.Delphi.Parser.Statements.pas"/>
         <DCCReference Include="Tests.DX.Delphi.AstBuilder.pas"/>
+        <DCCReference Include="Tests.DX.Delphi.Ast.Lowering.pas"/>
+        <DCCReference Include="Tests.DX.Delphi.Diagnostics.pas"/>
+        <DCCReference Include="Tests.DX.Delphi.Trivia.pas"/>
         <DCCReference Include="Tests.DX.Delphi.Samples.pas"/>
         <DCCReference Include="..\src\DX.Delphi.Core.pas"/>
         <DCCReference Include="..\src\DX.Delphi.Lexer.pas"/>

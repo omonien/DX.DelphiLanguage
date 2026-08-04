@@ -54,6 +54,10 @@ type
     procedure BuildMembers(ACSTMembers: TList<DX.Delphi.CST.TDLMember>;
       AASTMembers: TList<DX.Delphi.AST.TDLMember>);
     function BuildVariantPart(ACSTPart: DX.Delphi.CST.TDLVariantSection): DX.Delphi.AST.TDLVariantPart;
+    procedure BuildSectionDeclarations(ASection: DX.Delphi.CST.TDLNode;
+      ADeclarations: TList<DX.Delphi.AST.TDLDeclaration>);
+    function BuildTypeDecl(ACSTDecl: DX.Delphi.CST.TDLTypeDecl):
+      DX.Delphi.AST.TDLTypeDecl;
   public
     constructor Create(ADiagnostics: TDLDiagnostics);
     destructor Destroy; override;
@@ -420,7 +424,7 @@ begin
     if LParam.TypeExpr <> nil then
       LAstParam.TypeName := RenderTypeName(LParam.TypeExpr);
     if LParam.DefaultValue <> nil then
-      LAstParam.DefaultValue := RenderExpr(LParam.DefaultValue);
+      LAstParam.DefaultValue := BuildExpression(LParam.DefaultValue);
     Result.Add(LAstParam);
   end;
 end;
@@ -608,7 +612,7 @@ begin
         RenderTypeName(LVarDecl.VarDecl.TypeExpr);
     if LVarDecl.VarDecl.Init <> nil then
       DX.Delphi.AST.TDLVarDeclStmt(LAst).Init :=
-        RenderExpr(LVarDecl.VarDecl.Init);
+        BuildExpression(LVarDecl.VarDecl.Init);
     Result := LAst;
   end
   else if AStmt is DX.Delphi.CST.TDLLabelStmt then
@@ -800,6 +804,7 @@ var
   LImpl: DX.Delphi.CST.TDLMethodImpl;
   LDirective: DX.Delphi.CST.TDLDirective;
   LAstMethod: DX.Delphi.AST.TDLMethod;
+  LDecl: DX.Delphi.CST.TDLNode;
 begin
   for LMember in ACSTMembers do
   begin
@@ -855,6 +860,9 @@ begin
       if (LImpl.Body <> nil) and (LImpl.Body is DX.Delphi.CST.TDLCompoundStmt) then
         LAstMethod.Body.AddRange(BuildStatements(
           DX.Delphi.CST.TDLCompoundStmt(LImpl.Body).Statements));
+      LDecl := nil;
+      for LDecl in LImpl.LocalDecls do
+        BuildSectionDeclarations(LDecl, LAstMethod.LocalDeclarations);
       AASTMembers.Add(LAstMethod);
     end
     else if LMember is DX.Delphi.CST.TDLPropertyDecl then
@@ -875,10 +883,10 @@ begin
       DX.Delphi.AST.TDLProperty(LAst).IsDefault := LProperty.IsDefault;
       if LProperty.DefaultValue <> nil then
         DX.Delphi.AST.TDLProperty(LAst).DefaultValue :=
-          RenderExpr(LProperty.DefaultValue);
+          BuildExpression(LProperty.DefaultValue);
       if LProperty.IndexSpec <> nil then
         DX.Delphi.AST.TDLProperty(LAst).IndexExpr :=
-          RenderExpr(LProperty.IndexSpec);
+          BuildExpression(LProperty.IndexSpec);
       AASTMembers.Add(LAst);
     end
     else
@@ -921,6 +929,106 @@ begin
   Result := LPart;
 end;
 
+procedure TDLDelphiAstBuilder.BuildSectionDeclarations(
+  ASection: DX.Delphi.CST.TDLNode;
+  ADeclarations: TList<DX.Delphi.AST.TDLDeclaration>);
+var
+  LTypeSection: DX.Delphi.CST.TDLTypeSection;
+  LTypeDecl: DX.Delphi.CST.TDLTypeDecl;
+  LConstSection: DX.Delphi.CST.TDLConstSection;
+  LConstDecl: DX.Delphi.CST.TDLConstDecl;
+  LVarSection: DX.Delphi.CST.TDLVarSection;
+  LVarDecl: DX.Delphi.CST.TDLVarDecl;
+  LLabelSection: DX.Delphi.CST.TDLLabelSection;
+  LLabelDecl: DX.Delphi.CST.TDLLabelDecl;
+  LAstConst: DX.Delphi.AST.TDLConstDecl;
+  LAstVar: DX.Delphi.AST.TDLVarDecl;
+  LAstLabel: DX.Delphi.AST.TDLLabelDecl;
+  LName: DX.Delphi.CST.TDLIdentifier;
+begin
+  if ASection is DX.Delphi.CST.TDLTypeSection then
+  begin
+    LTypeSection := DX.Delphi.CST.TDLTypeSection(ASection);
+    for LTypeDecl in LTypeSection.Items do
+    begin
+      ADeclarations.Add(BuildTypeDecl(LTypeDecl));
+      FSymbols.Add(TDLSymbol.Create(LTypeDecl.Name.Name, skType,
+        LTypeDecl.Name.Span));
+    end;
+  end
+  else if ASection is DX.Delphi.CST.TDLConstSection then
+  begin
+    LConstSection := DX.Delphi.CST.TDLConstSection(ASection);
+    for LConstDecl in LConstSection.Items do
+    begin
+      LAstConst := DX.Delphi.AST.TDLConstDecl.Create(LConstDecl.Span);
+      for LName in LConstDecl.Names do
+        LAstConst.Names.Add(LName.Name);
+      if LConstDecl.TypeExpr <> nil then
+        LAstConst.TypeName := RenderTypeName(LConstDecl.TypeExpr);
+      if LConstDecl.Value <> nil then
+        LAstConst.Value := BuildExpression(LConstDecl.Value);
+      ADeclarations.Add(LAstConst);
+      for LName in LConstDecl.Names do
+        FSymbols.Add(TDLSymbol.Create(LName.Name, skConst, LName.Span));
+    end;
+  end
+  else if ASection is DX.Delphi.CST.TDLVarSection then
+  begin
+    LVarSection := DX.Delphi.CST.TDLVarSection(ASection);
+    for LVarDecl in LVarSection.Items do
+    begin
+      LAstVar := DX.Delphi.AST.TDLVarDecl.Create(LVarDecl.Span,
+        LVarSection.IsThreadVar);
+      for LName in LVarDecl.Names do
+        LAstVar.Names.Add(LName.Name);
+      if LVarDecl.TypeExpr <> nil then
+        LAstVar.TypeName := RenderTypeName(LVarDecl.TypeExpr);
+      if LVarDecl.Init <> nil then
+        LAstVar.Init := BuildExpression(LVarDecl.Init);
+      if LVarDecl.AbsoluteTarget <> nil then
+        LAstVar.AbsoluteOf := BuildExpression(LVarDecl.AbsoluteTarget);
+      ADeclarations.Add(LAstVar);
+      for LName in LVarDecl.Names do
+        if LVarSection.IsThreadVar then
+          FSymbols.Add(TDLSymbol.Create(LName.Name, skThreadVar, LName.Span))
+        else
+          FSymbols.Add(TDLSymbol.Create(LName.Name, skVar, LName.Span));
+    end;
+  end
+  else if ASection is DX.Delphi.CST.TDLLabelSection then
+  begin
+    LLabelSection := DX.Delphi.CST.TDLLabelSection(ASection);
+    for LLabelDecl in LLabelSection.Items do
+    begin
+      LAstLabel := DX.Delphi.AST.TDLLabelDecl.Create(LLabelDecl.Span,
+        LLabelDecl.Name.Name);
+      ADeclarations.Add(LAstLabel);
+      FSymbols.Add(TDLSymbol.Create(LLabelDecl.Name.Name, skLabel,
+        LLabelDecl.Name.Span));
+    end;
+  end;
+end;
+
+function TDLDelphiAstBuilder.BuildTypeDecl(
+  ACSTDecl: DX.Delphi.CST.TDLTypeDecl): DX.Delphi.AST.TDLTypeDecl;
+var
+  LDef: DX.Delphi.AST.TDLTypeDef;
+  LGeneric: DX.Delphi.AST.TDLGenericTypeDef;
+  LParam: DX.Delphi.CST.TDLIdentifier;
+begin
+  LDef := BuildTypeDef(ACSTDecl.TypeExpr);
+  if ACSTDecl.TypeParams.Count > 0 then
+  begin
+    LGeneric := DX.Delphi.AST.TDLGenericTypeDef.Create(ACSTDecl.Span, LDef);
+    for LParam in ACSTDecl.TypeParams do
+      LGeneric.TypeParams.Add(LParam.Name);
+    LDef := LGeneric;
+  end;
+  Result := DX.Delphi.AST.TDLTypeDecl.Create(ACSTDecl.Span,
+    ACSTDecl.Name.Name, LDef);
+end;
+
 function TDLDelphiAstBuilder.Build(ACST: DX.Delphi.CST.TDLCompilationUnit): DX.Delphi.AST.TDLModule;
 var
   LModule: DX.Delphi.AST.TDLModule;
@@ -950,6 +1058,7 @@ var
   LName: DX.Delphi.CST.TDLIdentifier;
   LDirective: DX.Delphi.CST.TDLDirective;
   LStmt: DX.Delphi.CST.TDLStatement;
+  LDecl: DX.Delphi.CST.TDLNode;
 begin
   case ACST.ProgramKind of
     pkProgram: LKind := DX.Delphi.AST.mkProgram;
@@ -977,8 +1086,7 @@ begin
       LTypeSection := DX.Delphi.CST.TDLTypeSection(LItem);
       for LTypeDecl in LTypeSection.Items do
       begin
-        LModule.Declarations.Add(DX.Delphi.AST.TDLTypeDecl.Create(LTypeDecl.Span,
-          LTypeDecl.Name.Name, BuildTypeDef(LTypeDecl.TypeExpr)));
+        LModule.Declarations.Add(BuildTypeDecl(LTypeDecl));
         FSymbols.Add(TDLSymbol.Create(LTypeDecl.Name.Name, skType,
           LTypeDecl.Name.Span));
       end;
@@ -994,7 +1102,7 @@ begin
         if LConstDecl.TypeExpr <> nil then
           LAstConst.TypeName := RenderTypeName(LConstDecl.TypeExpr);
         if LConstDecl.Value <> nil then
-          LAstConst.Value := RenderExpr(LConstDecl.Value);
+          LAstConst.Value := BuildExpression(LConstDecl.Value);
         LModule.Declarations.Add(LAstConst);
         for LName in LConstDecl.Names do
           FSymbols.Add(TDLSymbol.Create(LName.Name, skConst, LName.Span));
@@ -1009,7 +1117,7 @@ begin
         for LName in LConstDecl.Names do
           LAstConst.Names.Add(LName.Name);
         if LConstDecl.Value <> nil then
-          LAstConst.Value := RenderExpr(LConstDecl.Value);
+          LAstConst.Value := BuildExpression(LConstDecl.Value);
         LModule.Declarations.Add(LAstConst);
         for LName in LConstDecl.Names do
           FSymbols.Add(TDLSymbol.Create(LName.Name, skResourceString,
@@ -1028,9 +1136,9 @@ begin
         if LVarDecl.TypeExpr <> nil then
           LAstVar.TypeName := RenderTypeName(LVarDecl.TypeExpr);
         if LVarDecl.Init <> nil then
-          LAstVar.Init := RenderExpr(LVarDecl.Init);
+          LAstVar.Init := BuildExpression(LVarDecl.Init);
         if LVarDecl.AbsoluteTarget <> nil then
-          LAstVar.AbsoluteOf := RenderExpr(LVarDecl.AbsoluteTarget);
+          LAstVar.AbsoluteOf := BuildExpression(LVarDecl.AbsoluteTarget);
         LModule.Declarations.Add(LAstVar);
         for LName in LVarDecl.Names do
           if LVarSection.IsThreadVar then
@@ -1081,6 +1189,9 @@ begin
       if (LImpl.Body <> nil) and (LImpl.Body is DX.Delphi.CST.TDLCompoundStmt) then
         LAstProc.Body.AddRange(BuildStatements(
           DX.Delphi.CST.TDLCompoundStmt(LImpl.Body).Statements));
+      LDecl := nil;
+      for LDecl in LImpl.LocalDecls do
+        BuildSectionDeclarations(LDecl, LAstProc.LocalDeclarations);
       LModule.Declarations.Add(LAstProc);
       FSymbols.Add(TDLSymbol.Create(LImpl.Name.Name, skProcedure,
         LImpl.Name.Span));

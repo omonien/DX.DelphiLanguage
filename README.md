@@ -22,7 +22,7 @@ The project consists of a library (`src/`) plus two console applications:
 | `src/DX.Delphi.AstBuilder.pas` | CST → AST lowering pass |
 | `DLDemo.dpr` | Console demo: dumps tokens, CST, AST, symbols, diagnostics |
 | `samples/Demo.pas` | Sample exercising the covered language surface |
-| `tests/` | DUnitX test project (62 tests) |
+| `tests/` | DUnitX test project (146 tests) |
 | `libs/DUnitX` | DUnitX test framework (Git submodule) |
 
 All source files are UTF-8 with BOM and CRLF line endings.
@@ -236,12 +236,13 @@ quote-run rules), `#` char codes (decimal/hex/binary), integers
 - The symbol table is deliberately **flat and scope-less** (later
   declarations with the same name are ignored) — a starting point, not full
   name resolution.
-- Generic type **declaration** parameters (`TList<T>`) are accepted but not yet
-  carried into the AST; generic type **instantiations** are fully represented.
-- Method local `var`/`label`/`const`/`type` sections are parsed and skipped
-  (they are not yet attached to the method node).
-- The AST stores some scalar values (const values, initializers, defaults) as
-  compact rendered strings rather than expression trees.
+- Method local `var`/`label`/`const`/`type` sections are lowered into the
+  method's `LocalDeclarations` (both `TDLMethod` and `TDLProcDecl`).
+- Generic type **declaration** parameters (`TList<T>`) are carried into the
+  CST (`TDLTypeDecl.TypeParams`) and wrapped as `TDLGenericTypeDef` in the
+  AST; generic type **instantiations** are fully represented.
+- AST scalar values (const values, variable initializers, property defaults,
+  parameter defaults) are full expression trees, not rendered strings.
 - `break`/`continue`/`name`/`on`/`at`/`ref`/`helper`/`operator` are treated
   as keywords by the lexer; the parser accepts them as identifiers where
   Delphi treats them contextually.
