@@ -39,7 +39,8 @@ uses
   System.Generics.Collections,
   DX.Delphi.Core,
   DX.Delphi.Lexer,
-  DX.Delphi.CST;
+  DX.Delphi.CST,
+  DX.Delphi.Conditions;
 
 type
   /// <summary>Recursive-descent parser: token stream -> CST.</summary>
@@ -52,6 +53,7 @@ type
     FCurrentVisibility: TDLVisibility;
     FCurrentStrict: Boolean;
     FSuppressCount: Integer;
+    FConditionalDepth: Integer;
     FSteps: Integer;
     FCompoundGuard: Integer;
     FStmtDepth: Integer;
@@ -83,6 +85,10 @@ type
     function HasDirectiveTrivia: Boolean;
     function HasConditionalStartTrivia: Boolean;
     function HasConditionalContinuationTrivia: Boolean;
+    function LastConditionalDirective(out ACondition: TDLCondition)
+      : TDLConditionDirectiveKind;
+    function CanStartConditionalGroup: Boolean;
+    function ParseConditionalStatementGroup: TDLConditionalStmt;
     function IsQualifiedFollowedByDotDot: Boolean;
     function SectionLeadsToBody: Boolean;
     procedure SkipConditionalExpressionBranches;
@@ -470,6 +476,167 @@ begin
     end;
   end;
   Result := (Peek(LIndex).Kind = tkSymbol) and (Peek(LIndex).Text = '..');
+end;
+
+function TDLDelphiParser.LastConditionalDirective(
+  out ACondition: TDLCondition): TDLConditionDirectiveKind;
+var
+  i: Integer;
+  LKind: TDLConditionDirectiveKind;
+  LCond: TDLCondition;
+begin
+  // Examine the leading trivia of the current token and return the LAST
+  // conditional directive (the innermost / most recent one).
+  Result := cdNone;
+  ACondition := nil;
+  for i := 0 to GetCur.LeadingTrivia.Count - 1 do
+    if GetCur.LeadingTrivia[i].Kind = trDirective then
+    begin
+      LCond := nil;
+      LKind := ClassifyDirective(GetCur.LeadingTrivia[i].Text, LCond);
+      if LKind <> cdNone then
+      begin
+        ACondition.Free;
+        ACondition := LCond;
+        Result := LKind;
+      end
+      else
+        LCond.Free;
+    end;
+end;
+
+function TDLDelphiParser.CanStartConditionalGroup: Boolean;
+var
+  i: Integer;
+  LParenDepth: Integer;
+  LStmtDepth: Integer;
+  LTok: TDLToken;
+  j: Integer;
+  LKind: TDLConditionDirectiveKind;
+  LCond: TDLCondition;
+begin
+  // A statement-level conditional group is created only when the first
+  // branch is a clean, complete statement sequence: a ';' at paren depth 0
+  // (and outside any open begin/case/repeat/try block) must immediately
+  // precede the next branch marker ({$ELSE}/{$ELSEIF}/{$ENDIF}). Otherwise
+  // the conditional lies inside a single statement (shared begin/end
+  // constructs) and normal parsing keeps the first path.
+  Result := False;
+  LParenDepth := 0;
+  LStmtDepth := 0;
+  i := 0;
+  while i < 100000 do
+  begin
+    LTok := Peek(i);
+    if LTok.Kind = tkEOF then
+      Exit(False);
+    if LTok.LeadingTrivia.Count > 0 then
+      for j := 0 to LTok.LeadingTrivia.Count - 1 do
+        if LTok.LeadingTrivia[j].Kind = trDirective then
+        begin
+          LCond := nil;
+          LKind := ClassifyDirective(LTok.LeadingTrivia[j].Text, LCond);
+          LCond.Free;
+          if (LKind = cdElseIf) or (LKind = cdElse) or (LKind = cdEndIf) then
+          begin
+            // The branch marker must follow a ';' at paren depth 0 and
+            // statement depth 0.
+            Result := (i > 0) and (LParenDepth = 0) and (LStmtDepth = 0) and
+                      (Peek(i - 1).Kind = tkSymbol) and
+                      (Peek(i - 1).Text = ';');
+            Exit;
+          end;
+        end;
+    if LTok.Kind = tkKeyword then
+    begin
+      if (LTok.Text = 'begin') or (LTok.Text = 'case') or
+         (LTok.Text = 'repeat') or (LTok.Text = 'try') or
+         (LTok.Text = 'record') or (LTok.Text = 'class') or
+         (LTok.Text = 'interface') or (LTok.Text = 'object') or
+         (LTok.Text = 'dispinterface') then
+        Inc(LStmtDepth)
+      else if (LTok.Text = 'end') or (LTok.Text = 'until') then
+        Dec(LStmtDepth);
+    end
+    else if LTok.Kind = tkSymbol then
+      if LTok.Text = '(' then
+        Inc(LParenDepth)
+      else if LTok.Text = ')' then
+        Dec(LParenDepth);
+    Inc(i);
+  end;
+end;
+
+function TDLDelphiParser.ParseConditionalStatementGroup: TDLConditionalStmt;
+var
+  LGroup: TDLConditionalStmt;
+  LBranch: TDLConditionalBranch;
+  LStartDepth: Integer;
+  LDir: TDLConditionDirectiveKind;
+  LCond: TDLCondition;
+  LStatement: TDLStatement;
+  LSkipCheck: Boolean;
+  LGuard: Integer;
+  LPrevPos: Integer;
+begin
+  // Current token carries a conditional-start directive in its trivia.
+  LStartDepth := FConditionalDepth;
+  Inc(FConditionalDepth);
+  LGroup := TDLConditionalStmt.Create(GetSpan);
+  LCond := nil;
+  LastConditionalDirective(LCond);
+  LBranch := TDLConditionalBranch.Create(GetSpan, LCond);
+  LGroup.Branches.Add(LBranch);
+  LSkipCheck := True; // the opening directive belongs to this group
+  LGuard := 0;
+  while True do
+  begin
+    Inc(LGuard);
+    if LGuard > 1000000 then
+      raise Exception.Create('DLP-FATAL: conditional group loop at "' +
+        GetText + '"');
+    if GetKind = tkEOF then
+    begin
+      // Unterminated conditional group (missing {$ENDIF}).
+      Error('Unterminated conditional group');
+      Dec(FConditionalDepth);
+      Break;
+    end;
+    LDir := cdNone;
+    LCond := nil;
+    if not LSkipCheck then
+      LDir := LastConditionalDirective(LCond);
+    LSkipCheck := False;
+    if LDir = cdEndIf then
+    begin
+      LCond.Free;
+      Dec(FConditionalDepth);
+      Break; // the {$ENDIF} trivia remains attached to the following token
+    end;
+    if (LDir = cdElseIf) or (LDir = cdElse) then
+    begin
+      // A new branch starts at this token; the directive is its condition.
+      LBranch := TDLConditionalBranch.Create(GetSpan, LCond);
+      LGroup.Branches.Add(LBranch);
+      LSkipCheck := True; // do not re-interpret this token's directive
+      Continue;
+    end;
+    LCond.Free;
+    if (LDir = cdStart) and CanStartConditionalGroup then
+      LStatement := ParseConditionalStatementGroup // nested group
+    else if LDir = cdStart then
+      LStatement := ParseStatement // conditional inside a single statement
+    else
+      LStatement := ParseStatement;
+    LPrevPos := FPos;
+    if LStatement <> nil then
+      LBranch.Statements.Add(LStatement);
+    if IsSymbol(';') then
+      Advance;
+    if (FPos = LPrevPos) and (LStatement = nil) and (not IsSymbol(';')) then
+      Advance; // resynchronise on an unexpected terminator/block keyword
+  end;
+  Result := LGroup;
 end;
 
 function TDLDelphiParser.SectionLeadsToBody: Boolean;
@@ -978,6 +1145,8 @@ begin
       // A conditional branch of the type section may hold consts:
       //   type ...; {$IF X} C = SizeOf(T) div 4; {$ENDIF}
       if LSawConditional and IsSymbolAhead('=', 1) and
+         not ((Peek(2).Kind = tkInteger) and
+              (Peek(3).Kind = tkSymbol) and (Peek(3).Text = '..')) and
          ((Peek(2).Kind in [tkInteger, tkString, tkFloat, tkCharCode]) or
           ((Peek(2).Kind = tkIdentifier) and (Peek(3).Kind = tkSymbol) and
            (Peek(3).Text = '(')) or
@@ -3039,6 +3208,7 @@ var
   i: Integer;
   LTerminated: Boolean;
   LPrevPos: Integer;
+  LCond: TDLCondition;
 begin
   LStatements := TList<TDLStatement>.Create;
   FDirectiveStmt := False;
@@ -3062,7 +3232,18 @@ begin
     end;
     if HasConditionalStartTrivia then
       FDirectiveStmt := True;
-    LStatement := ParseStatement;
+    LCond := nil;
+    if (LastConditionalDirective(LCond) = cdStart) and
+       CanStartConditionalGroup then
+      begin
+        LCond.Free;
+        LStatement := ParseConditionalStatementGroup;
+      end
+      else
+      begin
+        LCond.Free;
+        LStatement := ParseStatement;
+      end;
     if (FPos = LPrevPos) and (LStatement = nil) and (not IsSymbol(';')) then
       Advance; // resynchronise on an unexpected terminator/block keyword
     if LStatement <> nil then
@@ -4174,6 +4355,7 @@ begin
   FCompoundGuard := 0;
   FStmtDepth := 0;
   FSuppressCount := 0;
+  FConditionalDepth := 0;
   FCurrentVisibility := vsPublished;
   FCurrentStrict := False;
 end;

@@ -15,7 +15,8 @@ uses
   System.SysUtils,
   DUnitX.TestFramework,
   DX.Delphi.Core,
-  DX.Delphi.CST;
+  DX.Delphi.CST,
+  DX.Delphi.Conditions;
 
 type
   [TestFixture]
@@ -56,6 +57,19 @@ type
   public
     [Test]
     procedure InitializationAndFinalization;
+  end;
+
+  [TestFixture]
+  TTestParserConditionalStmts = class
+  public
+    [Test]
+    procedure ConditionalGroupBasic;
+    [Test]
+    procedure ConditionalGroupElseIf;
+    [Test]
+    procedure ConditionalGroupNested;
+    [Test]
+    procedure ConditionalGroupProjection;
   end;
 
 implementation
@@ -346,6 +360,162 @@ begin
         LUnit.InitSection.Body).Statements.Count);
       Assert.AreEqual(1, TDLCompoundStmt(
         LUnit.FinalizationSection.Body).Statements.Count);
+    finally
+      LUnit.Free;
+    end;
+  finally
+    LDiagnostics.Free;
+  end;
+end;
+
+{ TTestParserConditionalStmts }
+
+procedure TTestParserConditionalStmts.ConditionalGroupBasic;
+var
+  LDiagnostics: TDLDiagnostics;
+  LUnit: TDLCompilationUnit;
+  LBody: TDLCompoundStmt;
+  LCond: TDLConditionalStmt;
+begin
+  LDiagnostics := TDLDiagnostics.Create;
+  try
+    LUnit := ParseSource(
+      'program P;'#13#10'begin'#13#10+
+      '{$IFDEF A}'#13#10+
+      '  Foo(1);'#13#10+
+      '{$ELSE}'#13#10+
+      '  Foo(2);'#13#10+
+      '{$ENDIF}'#13#10+
+      '  Foo(3);'#13#10'end.', LDiagnostics);
+    try
+      Assert.AreEqual(0, LDiagnostics.Count);
+      LBody := TDLCompoundStmt(LUnit.InitSection.Body);
+      Assert.AreEqual(2, LBody.Statements.Count);
+      LCond := TDLConditionalStmt(LBody.Statements[0]);
+      Assert.AreEqual(2, LCond.Branches.Count);
+      Assert.IsNotNull(LCond.Branches[0].Condition);
+      Assert.AreEqual('Defined(A)', LCond.Branches[0].Condition.ToString);
+      Assert.AreEqual(1, LCond.Branches[0].Statements.Count);
+      Assert.AreEqual(ckAlways, LCond.Branches[1].Condition.Kind);
+      Assert.AreEqual(1, LCond.Branches[1].Statements.Count);
+      // The statement after {$ENDIF} is a sibling of the conditional group.
+      Assert.IsTrue(LBody.Statements[1] is TDLExprStmt);
+    finally
+      LUnit.Free;
+    end;
+  finally
+    LDiagnostics.Free;
+  end;
+end;
+
+procedure TTestParserConditionalStmts.ConditionalGroupElseIf;
+var
+  LDiagnostics: TDLDiagnostics;
+  LUnit: TDLCompilationUnit;
+  LBody: TDLCompoundStmt;
+  LCond: TDLConditionalStmt;
+begin
+  LDiagnostics := TDLDiagnostics.Create;
+  try
+    LUnit := ParseSource(
+      'program P;'#13#10'begin'#13#10+
+      '{$IF Defined(A)}'#13#10+
+      '  Foo(1);'#13#10+
+      '{$ELSEIF Defined(B)}'#13#10+
+      '  Foo(2);'#13#10+
+      '{$ELSE}'#13#10+
+      '  Foo(3);'#13#10+
+      '{$ENDIF}'#13#10'end.', LDiagnostics);
+    try
+      Assert.AreEqual(0, LDiagnostics.Count);
+      LBody := TDLCompoundStmt(LUnit.InitSection.Body);
+      LCond := TDLConditionalStmt(LBody.Statements[0]);
+      Assert.AreEqual(3, LCond.Branches.Count);
+      Assert.AreEqual('Defined(A)', LCond.Branches[0].Condition.ToString);
+      Assert.AreEqual('Defined(B)', LCond.Branches[1].Condition.ToString);
+      Assert.AreEqual(ckAlways, LCond.Branches[2].Condition.Kind);
+    finally
+      LUnit.Free;
+    end;
+  finally
+    LDiagnostics.Free;
+  end;
+end;
+
+procedure TTestParserConditionalStmts.ConditionalGroupNested;
+var
+  LDiagnostics: TDLDiagnostics;
+  LUnit: TDLCompilationUnit;
+  LBody: TDLCompoundStmt;
+  LCond, LInner: TDLConditionalStmt;
+begin
+  LDiagnostics := TDLDiagnostics.Create;
+  try
+    LUnit := ParseSource(
+      'program P;'#13#10'begin'#13#10+
+      '{$IFDEF A}'#13#10+
+      '  {$IFDEF B}'#13#10+
+      '    Foo(1);'#13#10+
+      '  {$ELSE}'#13#10+
+      '    Foo(2);'#13#10+
+      '  {$ENDIF}'#13#10+
+      '{$ELSE}'#13#10+
+      '  Foo(3);'#13#10+
+      '{$ENDIF}'#13#10'end.', LDiagnostics);
+    try
+      Assert.AreEqual(0, LDiagnostics.Count);
+      LBody := TDLCompoundStmt(LUnit.InitSection.Body);
+      LCond := TDLConditionalStmt(LBody.Statements[0]);
+      Assert.AreEqual(2, LCond.Branches.Count);
+      // The first branch contains a nested conditional group.
+      Assert.AreEqual(1, LCond.Branches[0].Statements.Count);
+      LInner := TDLConditionalStmt(LCond.Branches[0].Statements[0]);
+      Assert.AreEqual(2, LInner.Branches.Count);
+      Assert.AreEqual('Defined(B)', LInner.Branches[0].Condition.ToString);
+    finally
+      LUnit.Free;
+    end;
+  finally
+    LDiagnostics.Free;
+  end;
+end;
+
+procedure TTestParserConditionalStmts.ConditionalGroupProjection;
+var
+  LDiagnostics: TDLDiagnostics;
+  LUnit: TDLCompilationUnit;
+  LBody: TDLCompoundStmt;
+  LCond: TDLConditionalStmt;
+  LDefines: TDLDefineSet;
+  LActive: Boolean;
+begin
+  LDiagnostics := TDLDiagnostics.Create;
+  try
+    LUnit := ParseSource(
+      'program P;'#13#10'begin'#13#10+
+      '{$IFDEF A}'#13#10+
+      '  Foo(1);'#13#10+
+      '{$ELSEIF Defined(B)}'#13#10+
+      '  Foo(2);'#13#10+
+      '{$ELSE}'#13#10+
+      '  Foo(3);'#13#10+
+      '{$ENDIF}'#13#10'end.', LDiagnostics);
+    try
+      LBody := TDLCompoundStmt(LUnit.InitSection.Body);
+      LCond := TDLConditionalStmt(LBody.Statements[0]);
+      LDefines := TDLDefineSet.Create;
+      try
+        // Configuration {B}: the second branch is active.
+        LDefines.Define('B');
+        LActive := False;
+        if LCond.Branches[0].Condition.Evaluate(LDefines) then
+          LActive := True
+        else if LCond.Branches[1].Condition.Evaluate(LDefines) then
+          LActive := True;
+        Assert.IsTrue(LActive);
+      finally
+        LDefines.Free;
+      end;
     finally
       LUnit.Free;
     end;

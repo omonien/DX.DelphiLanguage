@@ -30,7 +30,8 @@ uses
   System.SysUtils,
   System.Classes,
   System.Generics.Collections,
-  DX.Delphi.Core;
+  DX.Delphi.Core,
+  DX.Delphi.Conditions;
 
 type
   /// <summary>Program kind of a compilation unit.</summary>
@@ -180,6 +181,39 @@ type
 
   /// <summary>A statement.</summary>
   TDLStatement = class abstract(TDLNode)
+  end;
+
+  TDLConditionalBranch = class;
+  TDLConditionalStmt = class;
+
+  /// <summary>One conditional branch: a guard condition and its statements.</summary>
+  TDLConditionalBranch = class(TDLNode)
+  private
+    FCondition: TDLCondition;
+    FStatements: TList<TDLStatement>;
+  public
+    constructor Create(ASpan: TDLSourceSpan; ACondition: TDLCondition);
+    destructor Destroy; override;
+    procedure Dump(ABuilder: TStringBuilder; AIndent: Integer); override;
+    property Condition: TDLCondition read FCondition;
+    property Statements: TList<TDLStatement> read FStatements;
+  end;
+
+  /// <summary>
+  ///  A conditional-compilation statement group:
+  ///    {$IFDEF X} stmts {$ELSEIF Y} stmts {$ELSE} stmts {$ENDIF}
+  ///  All branches are kept structurally so a code formatter can reformat
+  ///  every conditional path; a projection pass selects the active branch
+  ///  for a given define configuration.
+  /// </summary>
+  TDLConditionalStmt = class(TDLStatement)
+  private
+    FBranches: TList<TDLConditionalBranch>;
+  public
+    constructor Create(ASpan: TDLSourceSpan);
+    destructor Destroy; override;
+    procedure Dump(ABuilder: TStringBuilder; AIndent: Integer); override;
+    property Branches: TList<TDLConditionalBranch> read FBranches;
   end;
 
   /// <summary>A type argument of a generic instantiation (e.g. TList&lt;Integer&gt;).</summary>
@@ -2736,6 +2770,58 @@ begin
   for LStatement in FStatements do
     LStatement.Dump(ABuilder, AIndent + 1);
   DumpHeader(ABuilder, AIndent, 'end');
+end;
+
+{ TDLConditionalBranch }
+
+constructor TDLConditionalBranch.Create(ASpan: TDLSourceSpan;
+  ACondition: TDLCondition);
+begin
+  inherited Create(ASpan);
+  FCondition := ACondition;
+  FStatements := TList<TDLStatement>.Create;
+end;
+
+destructor TDLConditionalBranch.Destroy;
+begin
+  FCondition.Free;
+  FStatements.Free;
+  inherited Destroy;
+end;
+
+procedure TDLConditionalBranch.Dump(ABuilder: TStringBuilder; AIndent: Integer);
+var
+  LStatement: TDLStatement;
+begin
+  if FCondition = nil then
+    DumpHeader(ABuilder, AIndent, 'branch')
+  else
+    DumpHeader(ABuilder, AIndent, 'branch ' + FCondition.ToString);
+  for LStatement in FStatements do
+    LStatement.Dump(ABuilder, AIndent + 1);
+end;
+
+{ TDLConditionalStmt }
+
+constructor TDLConditionalStmt.Create(ASpan: TDLSourceSpan);
+begin
+  inherited Create(ASpan);
+  FBranches := TList<TDLConditionalBranch>.Create;
+end;
+
+destructor TDLConditionalStmt.Destroy;
+begin
+  FBranches.Free;
+  inherited Destroy;
+end;
+
+procedure TDLConditionalStmt.Dump(ABuilder: TStringBuilder; AIndent: Integer);
+var
+  LBranch: TDLConditionalBranch;
+begin
+  DumpHeader(ABuilder, AIndent, 'conditional');
+  for LBranch in FBranches do
+    LBranch.Dump(ABuilder, AIndent + 1);
 end;
 
 { TDLIfStmt }

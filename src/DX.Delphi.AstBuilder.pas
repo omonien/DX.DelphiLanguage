@@ -460,6 +460,11 @@ var
   LAst: DX.Delphi.AST.TDLStmt;
   LSelector: DX.Delphi.CST.TDLCaseSelector;
   LHandler: DX.Delphi.CST.TDLOnHandler;
+  LCondStmt: DX.Delphi.CST.TDLConditionalStmt;
+  LCondBranch: DX.Delphi.CST.TDLConditionalBranch;
+  LAstCondStmt: DX.Delphi.AST.TDLConditionalStmt;
+  LAstCondBranch: DX.Delphi.AST.TDLConditionalBranch;
+  LStmt: DX.Delphi.CST.TDLStatement;
   LName: DX.Delphi.CST.TDLIdentifier;
   LDirection: string;
   LExpression: DX.Delphi.CST.TDLExpr;
@@ -623,6 +628,20 @@ begin
       DX.Delphi.AST.TDLLabelStmt(LAst).Statement :=
         BuildStatement(LLabel.Statement);
     Result := LAst;
+  end
+  else if AStmt is DX.Delphi.CST.TDLConditionalStmt then
+  begin
+    LCondStmt := DX.Delphi.CST.TDLConditionalStmt(AStmt);
+    LAstCondStmt := DX.Delphi.AST.TDLConditionalStmt.Create(AStmt.Span);
+    for LCondBranch in LCondStmt.Branches do
+    begin
+      LAstCondBranch := DX.Delphi.AST.TDLConditionalBranch.Create(
+        LCondBranch.Span, LCondBranch.Condition.Clone);
+      LAstCondStmt.Branches.Add(LAstCondBranch);
+      for LStmt in LCondBranch.Statements do
+        LAstCondBranch.Statements.Add(BuildStatement(LStmt));
+    end;
+    Result := LAstCondStmt;
   end
   else
     Result := DX.Delphi.AST.TDLEmptyStmt.Create(AStmt.Span);

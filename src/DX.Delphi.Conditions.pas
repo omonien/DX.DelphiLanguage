@@ -60,6 +60,8 @@ type
 
     /// <summary>Evaluates the condition against a define configuration.</summary>
     function Evaluate(const ADefines: TDLDefineSet): Boolean;
+    /// <summary>Deep copy (the caller owns the returned instance).</summary>
+    function Clone: TDLCondition;
     /// <summary>Human-readable form, e.g. "Defined(DEBUG) and not Defined(POSIX)".</summary>
     function ToString: string; override;
 
@@ -69,6 +71,14 @@ type
     property Right: TDLCondition read FRight;
     property Operand: TDLCondition read FOperand;
   end;
+
+  /// <summary>Kind of a conditional-compilation directive.</summary>
+  TDLConditionDirectiveKind = (
+    cdNone,    // not a conditional directive
+    cdStart,   // {$IFDEF X} / {$IFNDEF X} / {$IF ...}  (opens a branch chain)
+    cdElseIf,  // {$ELSEIF ...}
+    cdElse,    // {$ELSE}
+    cdEndIf);  // {$ENDIF}
 
   /// <summary>
   ///  A case-insensitive set of defined symbols. This is the "configuration"
@@ -100,6 +110,14 @@ type
     /// </summary>
     class function ParseDirective(const ADirectiveText: string): TDLCondition;
   end;
+
+  /// <summary>
+  ///  Classifies a directive text (e.g. "{$ELSEIF Defined(X)}") and, for
+  ///  cdStart/cdElseIf, returns the parsed condition. For cdElse, Condition
+  ///  is an Always condition. For cdNone/cdEndIf, Condition is nil.
+  /// </summary>
+  function ClassifyDirective(const ADirectiveText: string;
+    out ACondition: TDLCondition): TDLConditionDirectiveKind;
 
 implementation
 
@@ -175,6 +193,26 @@ begin
       Result := FLeft.Evaluate(ADefines) or FRight.Evaluate(ADefines);
   else
     Result := False;
+  end;
+end;
+
+function TDLCondition.Clone: TDLCondition;
+begin
+  case FKind of
+    ckAlways:
+      Result := TDLCondition.CreateAlways;
+    ckDefined:
+      Result := TDLCondition.CreateDefined(FSymbol);
+    ckNotDefined:
+      Result := TDLCondition.CreateNotDefined(FSymbol);
+    ckNot:
+      Result := TDLCondition.CreateNot(FOperand.Clone);
+    ckAnd:
+      Result := TDLCondition.CreateAnd(FLeft.Clone, FRight.Clone);
+    ckOr:
+      Result := TDLCondition.CreateOr(FLeft.Clone, FRight.Clone);
+  else
+    Result := TDLCondition.CreateAlways;
   end;
 end;
 
@@ -485,6 +523,48 @@ begin
   end
   else if SameText(LWord, 'ELSE') then
     Result := TDLCondition.CreateAlways;
+end;
+
+function ClassifyDirective(const ADirectiveText: string;
+  out ACondition: TDLCondition): TDLConditionDirectiveKind;
+var
+  LText: string;
+  LInner: string;
+  LPos: Integer;
+  LWord: string;
+begin
+  ACondition := nil;
+  Result := cdNone;
+  LText := Trim(ADirectiveText);
+  if (Length(LText) < 4) or (LText[1] <> '{') or (LText[Length(LText)] <> '}') then
+    Exit;
+  LInner := Trim(Copy(LText, 2, Length(LText) - 2));
+  if (Length(LInner) < 2) or (LInner[1] <> '$') then
+    Exit;
+  LInner := Trim(Copy(LInner, 2, Length(LInner) - 1));
+  LPos := 1;
+  while (LPos <= Length(LInner)) and
+        CharInSet(LInner[LPos], ['A'..'Z', 'a'..'z']) do
+    Inc(LPos);
+  LWord := Copy(LInner, 1, LPos - 1);
+  if SameText(LWord, 'ENDIF') or SameText(LWord, 'IFEND') then
+    Result := cdEndIf
+  else if SameText(LWord, 'ELSEIF') then
+  begin
+    Result := cdElseIf;
+    ACondition := TDLConditionParser.ParseDirective(ADirectiveText);
+  end
+  else if SameText(LWord, 'ELSE') then
+  begin
+    Result := cdElse;
+    ACondition := TDLCondition.CreateAlways;
+  end
+  else if SameText(LWord, 'IFDEF') or SameText(LWord, 'IFNDEF') or
+          SameText(LWord, 'IF') then
+  begin
+    Result := cdStart;
+    ACondition := TDLConditionParser.ParseDirective(ADirectiveText);
+  end;
 end;
 
 end.
