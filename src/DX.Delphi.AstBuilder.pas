@@ -37,6 +37,9 @@ uses
   DX.Delphi.AST;
 
 type
+  /// <summary>Kind of declaration items inside a conditional group.</summary>
+  TDLGroupItemKind = (ikType, ikConst, ikVar);
+
   /// <summary>Builds an abstract syntax tree from a concrete syntax tree.</summary>
   TDLDelphiAstBuilder = class
   private
@@ -58,8 +61,13 @@ type
       ADeclarations: TList<DX.Delphi.AST.TDLDeclaration>);
     function BuildTypeDecl(ACSTDecl: DX.Delphi.CST.TDLTypeDecl):
       DX.Delphi.AST.TDLTypeDecl;
+    function BuildConstDecl(ACSTDecl: DX.Delphi.CST.TDLConstDecl):
+      DX.Delphi.AST.TDLConstDecl;
+    function BuildVarDecl(ACSTDecl: DX.Delphi.CST.TDLVarDecl;
+      AIsThreadVar: Boolean): DX.Delphi.AST.TDLVarDecl;
     function BuildDeclConditionalGroup(
-      ACSTGroup: DX.Delphi.CST.TDLConditionalGroup):
+      ACSTGroup: DX.Delphi.CST.TDLConditionalGroup;
+      AItemKind: TDLGroupItemKind):
       DX.Delphi.AST.TDLConditionalDeclGroup;
   public
     constructor Create(ADiagnostics: TDLDiagnostics);
@@ -965,8 +973,10 @@ var
   LAstCondDeclBranch: DX.Delphi.AST.TDLConditionalDeclBranch;
   LConstSection: DX.Delphi.CST.TDLConstSection;
   LConstDecl: DX.Delphi.CST.TDLConstDecl;
+  LConstItem: DX.Delphi.CST.TDLNode;
   LVarSection: DX.Delphi.CST.TDLVarSection;
   LVarDecl: DX.Delphi.CST.TDLVarDecl;
+  LVarItem: DX.Delphi.CST.TDLNode;
   LLabelSection: DX.Delphi.CST.TDLLabelSection;
   LLabelDecl: DX.Delphi.CST.TDLLabelDecl;
   LAstConst: DX.Delphi.AST.TDLConstDecl;
@@ -988,48 +998,43 @@ begin
       else if LTypeItem is DX.Delphi.CST.TDLConditionalGroup then
       begin
         ADeclarations.Add(BuildDeclConditionalGroup(
-          DX.Delphi.CST.TDLConditionalGroup(LTypeItem)));
+          DX.Delphi.CST.TDLConditionalGroup(LTypeItem), ikType));
       end;
   end
   else if ASection is DX.Delphi.CST.TDLConstSection then
   begin
     LConstSection := DX.Delphi.CST.TDLConstSection(ASection);
-    for LConstDecl in LConstSection.Items do
-    begin
-      LAstConst := DX.Delphi.AST.TDLConstDecl.Create(LConstDecl.Span);
-      for LName in LConstDecl.Names do
-        LAstConst.Names.Add(LName.Name);
-      if LConstDecl.TypeExpr <> nil then
-        LAstConst.TypeName := RenderTypeName(LConstDecl.TypeExpr);
-      if LConstDecl.Value <> nil then
-        LAstConst.Value := BuildExpression(LConstDecl.Value);
-      ADeclarations.Add(LAstConst);
-      for LName in LConstDecl.Names do
-        FSymbols.Add(TDLSymbol.Create(LName.Name, skConst, LName.Span));
-    end;
+    for LConstItem in LConstSection.Items do
+      if LConstItem is DX.Delphi.CST.TDLConstDecl then
+      begin
+        LConstDecl := DX.Delphi.CST.TDLConstDecl(LConstItem);
+        LAstConst := BuildConstDecl(LConstDecl);
+        ADeclarations.Add(LAstConst);
+        for LName in LConstDecl.Names do
+          FSymbols.Add(TDLSymbol.Create(LName.Name, skConst, LName.Span));
+      end
+      else if LConstItem is DX.Delphi.CST.TDLConditionalGroup then
+        ADeclarations.Add(BuildDeclConditionalGroup(
+          DX.Delphi.CST.TDLConditionalGroup(LConstItem), ikConst));
   end
   else if ASection is DX.Delphi.CST.TDLVarSection then
   begin
     LVarSection := DX.Delphi.CST.TDLVarSection(ASection);
-    for LVarDecl in LVarSection.Items do
-    begin
-      LAstVar := DX.Delphi.AST.TDLVarDecl.Create(LVarDecl.Span,
-        LVarSection.IsThreadVar);
-      for LName in LVarDecl.Names do
-        LAstVar.Names.Add(LName.Name);
-      if LVarDecl.TypeExpr <> nil then
-        LAstVar.TypeName := RenderTypeName(LVarDecl.TypeExpr);
-      if LVarDecl.Init <> nil then
-        LAstVar.Init := BuildExpression(LVarDecl.Init);
-      if LVarDecl.AbsoluteTarget <> nil then
-        LAstVar.AbsoluteOf := BuildExpression(LVarDecl.AbsoluteTarget);
-      ADeclarations.Add(LAstVar);
-      for LName in LVarDecl.Names do
-        if LVarSection.IsThreadVar then
-          FSymbols.Add(TDLSymbol.Create(LName.Name, skThreadVar, LName.Span))
-        else
-          FSymbols.Add(TDLSymbol.Create(LName.Name, skVar, LName.Span));
-    end;
+    for LVarItem in LVarSection.Items do
+      if LVarItem is DX.Delphi.CST.TDLVarDecl then
+      begin
+        LVarDecl := DX.Delphi.CST.TDLVarDecl(LVarItem);
+        LAstVar := BuildVarDecl(LVarDecl, LVarSection.IsThreadVar);
+        ADeclarations.Add(LAstVar);
+        for LName in LVarDecl.Names do
+          if LVarSection.IsThreadVar then
+            FSymbols.Add(TDLSymbol.Create(LName.Name, skThreadVar, LName.Span))
+          else
+            FSymbols.Add(TDLSymbol.Create(LName.Name, skVar, LName.Span));
+      end
+      else if LVarItem is DX.Delphi.CST.TDLConditionalGroup then
+        ADeclarations.Add(BuildDeclConditionalGroup(
+          DX.Delphi.CST.TDLConditionalGroup(LVarItem), ikVar));
   end
   else if ASection is DX.Delphi.CST.TDLLabelSection then
   begin
@@ -1064,8 +1069,40 @@ begin
     ACSTDecl.Name.Name, LDef);
 end;
 
+function TDLDelphiAstBuilder.BuildConstDecl(
+  ACSTDecl: DX.Delphi.CST.TDLConstDecl): DX.Delphi.AST.TDLConstDecl;
+var
+  LName: DX.Delphi.CST.TDLIdentifier;
+begin
+  Result := DX.Delphi.AST.TDLConstDecl.Create(ACSTDecl.Span);
+  for LName in ACSTDecl.Names do
+    Result.Names.Add(LName.Name);
+  if ACSTDecl.TypeExpr <> nil then
+    Result.TypeName := RenderTypeName(ACSTDecl.TypeExpr);
+  if ACSTDecl.Value <> nil then
+    Result.Value := BuildExpression(ACSTDecl.Value);
+end;
+
+function TDLDelphiAstBuilder.BuildVarDecl(
+  ACSTDecl: DX.Delphi.CST.TDLVarDecl; AIsThreadVar: Boolean):
+  DX.Delphi.AST.TDLVarDecl;
+var
+  LName: DX.Delphi.CST.TDLIdentifier;
+begin
+  Result := DX.Delphi.AST.TDLVarDecl.Create(ACSTDecl.Span, AIsThreadVar);
+  for LName in ACSTDecl.Names do
+    Result.Names.Add(LName.Name);
+  if ACSTDecl.TypeExpr <> nil then
+    Result.TypeName := RenderTypeName(ACSTDecl.TypeExpr);
+  if ACSTDecl.Init <> nil then
+    Result.Init := BuildExpression(ACSTDecl.Init);
+  if ACSTDecl.AbsoluteTarget <> nil then
+    Result.AbsoluteOf := BuildExpression(ACSTDecl.AbsoluteTarget);
+end;
+
 function TDLDelphiAstBuilder.BuildDeclConditionalGroup(
-  ACSTGroup: DX.Delphi.CST.TDLConditionalGroup):
+  ACSTGroup: DX.Delphi.CST.TDLConditionalGroup;
+  AItemKind: TDLGroupItemKind):
   DX.Delphi.AST.TDLConditionalDeclGroup;
 var
   LBranch: DX.Delphi.CST.TDLConditionalDeclBranch;
@@ -1079,8 +1116,20 @@ begin
       LBranch.Span, LBranch.Condition.Clone);
     Result.Branches.Add(LAstBranch);
     for LItem in LBranch.Items do
-      if LItem is DX.Delphi.CST.TDLTypeDecl then
-        LAstBranch.Items.Add(BuildTypeDecl(DX.Delphi.CST.TDLTypeDecl(LItem)));
+      case AItemKind of
+        ikType:
+          if LItem is DX.Delphi.CST.TDLTypeDecl then
+            LAstBranch.Items.Add(BuildTypeDecl(
+              DX.Delphi.CST.TDLTypeDecl(LItem)));
+        ikConst:
+          if LItem is DX.Delphi.CST.TDLConstDecl then
+            LAstBranch.Items.Add(BuildConstDecl(
+              DX.Delphi.CST.TDLConstDecl(LItem)));
+        ikVar:
+          if LItem is DX.Delphi.CST.TDLVarDecl then
+            LAstBranch.Items.Add(BuildVarDecl(
+              DX.Delphi.CST.TDLVarDecl(LItem), False));
+      end;
   end;
 end;
 
@@ -1096,9 +1145,11 @@ var
   LTypeItem: DX.Delphi.CST.TDLNode;
   LConstSection: DX.Delphi.CST.TDLConstSection;
   LConstDecl: DX.Delphi.CST.TDLConstDecl;
+  LConstItem: DX.Delphi.CST.TDLNode;
   LResStringSection: DX.Delphi.CST.TDLResStringSection;
   LVarSection: DX.Delphi.CST.TDLVarSection;
   LVarDecl: DX.Delphi.CST.TDLVarDecl;
+  LVarItem: DX.Delphi.CST.TDLNode;
   LLabelSection: DX.Delphi.CST.TDLLabelSection;
   LLabelDecl: DX.Delphi.CST.TDLLabelDecl;
   LExports: DX.Delphi.CST.TDLExportsClause;
@@ -1150,24 +1201,23 @@ begin
         end
         else if LTypeItem is DX.Delphi.CST.TDLConditionalGroup then
           LModule.Declarations.Add(BuildDeclConditionalGroup(
-            DX.Delphi.CST.TDLConditionalGroup(LTypeItem)));
+            DX.Delphi.CST.TDLConditionalGroup(LTypeItem), ikType));
     end
     else if LItem is DX.Delphi.CST.TDLConstSection then
     begin
       LConstSection := DX.Delphi.CST.TDLConstSection(LItem);
-      for LConstDecl in LConstSection.Items do
-      begin
-        LAstConst := DX.Delphi.AST.TDLConstDecl.Create(LConstDecl.Span);
-        for LName in LConstDecl.Names do
-          LAstConst.Names.Add(LName.Name);
-        if LConstDecl.TypeExpr <> nil then
-          LAstConst.TypeName := RenderTypeName(LConstDecl.TypeExpr);
-        if LConstDecl.Value <> nil then
-          LAstConst.Value := BuildExpression(LConstDecl.Value);
-        LModule.Declarations.Add(LAstConst);
-        for LName in LConstDecl.Names do
-          FSymbols.Add(TDLSymbol.Create(LName.Name, skConst, LName.Span));
-      end;
+      for LConstItem in LConstSection.Items do
+        if LConstItem is DX.Delphi.CST.TDLConstDecl then
+        begin
+          LConstDecl := DX.Delphi.CST.TDLConstDecl(LConstItem);
+          LAstConst := BuildConstDecl(LConstDecl);
+          LModule.Declarations.Add(LAstConst);
+          for LName in LConstDecl.Names do
+            FSymbols.Add(TDLSymbol.Create(LName.Name, skConst, LName.Span));
+        end
+        else if LConstItem is DX.Delphi.CST.TDLConditionalGroup then
+          LModule.Declarations.Add(BuildDeclConditionalGroup(
+            DX.Delphi.CST.TDLConditionalGroup(LConstItem), ikConst));
     end
     else if LItem is DX.Delphi.CST.TDLResStringSection then
     begin
@@ -1188,25 +1238,22 @@ begin
     else if LItem is DX.Delphi.CST.TDLVarSection then
     begin
       LVarSection := DX.Delphi.CST.TDLVarSection(LItem);
-      for LVarDecl in LVarSection.Items do
-      begin
-        LAstVar := DX.Delphi.AST.TDLVarDecl.Create(LVarDecl.Span,
-          LVarSection.IsThreadVar);
-        for LName in LVarDecl.Names do
-          LAstVar.Names.Add(LName.Name);
-        if LVarDecl.TypeExpr <> nil then
-          LAstVar.TypeName := RenderTypeName(LVarDecl.TypeExpr);
-        if LVarDecl.Init <> nil then
-          LAstVar.Init := BuildExpression(LVarDecl.Init);
-        if LVarDecl.AbsoluteTarget <> nil then
-          LAstVar.AbsoluteOf := BuildExpression(LVarDecl.AbsoluteTarget);
-        LModule.Declarations.Add(LAstVar);
-        for LName in LVarDecl.Names do
-          if LVarSection.IsThreadVar then
-            FSymbols.Add(TDLSymbol.Create(LName.Name, skThreadVar, LName.Span))
-          else
-            FSymbols.Add(TDLSymbol.Create(LName.Name, skVar, LName.Span));
-      end;
+      for LVarItem in LVarSection.Items do
+        if LVarItem is DX.Delphi.CST.TDLVarDecl then
+        begin
+          LVarDecl := DX.Delphi.CST.TDLVarDecl(LVarItem);
+          LAstVar := BuildVarDecl(LVarDecl, LVarSection.IsThreadVar);
+          LModule.Declarations.Add(LAstVar);
+          for LName in LVarDecl.Names do
+            if LVarSection.IsThreadVar then
+              FSymbols.Add(TDLSymbol.Create(LName.Name, skThreadVar,
+                LName.Span))
+            else
+              FSymbols.Add(TDLSymbol.Create(LName.Name, skVar, LName.Span));
+        end
+        else if LVarItem is DX.Delphi.CST.TDLConditionalGroup then
+          LModule.Declarations.Add(BuildDeclConditionalGroup(
+            DX.Delphi.CST.TDLConditionalGroup(LVarItem), ikVar));
     end
     else if LItem is DX.Delphi.CST.TDLLabelSection then
     begin

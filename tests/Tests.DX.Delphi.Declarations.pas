@@ -50,6 +50,15 @@ type
   end;
 
   [TestFixture]
+  TTestConditionalConstVarDeclarations = class
+  public
+    [Test]
+    procedure ConditionalConstGroup;
+    [Test]
+    procedure ConditionalVarGroup;
+  end;
+
+  [TestFixture]
   TTestAttributesDeclarations = class
   public
     [Test]
@@ -92,7 +101,7 @@ begin
       'implementation'#13#10'end.', LDiagnostics);
     try
       Assert.AreEqual(0, LDiagnostics.Count);
-      LConst := TDLConstSection(LUnit.Items[0]).Items[0];
+      LConst := TDLConstDecl(TDLConstSection(LUnit.Items[0]).Items[0]);
       Assert.IsTrue(LConst.IsTyped);
       Assert.IsNotNull(LConst.TypeExpr);
       Assert.IsNotNull(LConst.Value);
@@ -120,12 +129,12 @@ begin
       'implementation'#13#10'end.', LDiagnostics);
     try
       Assert.AreEqual(0, LDiagnostics.Count);
-      LConst := TDLConstSection(LUnit.Items[0]).Items[0];
+      LConst := TDLConstDecl(TDLConstSection(LUnit.Items[0]).Items[0]);
       Assert.IsNotNull(LConst.Value);
       LExpr := LConst.Value;
       Assert.IsTrue(LExpr is TDLBinaryExpr);
       Assert.AreEqual(boAdd, TDLBinaryExpr(LExpr).Operator);
-      LConst := TDLConstSection(LUnit.Items[0]).Items[1];
+      LConst := TDLConstDecl(TDLConstSection(LUnit.Items[0]).Items[1]);
       Assert.IsTrue(LConst.Value is TDLBinaryExpr);
     finally
       LUnit.Free;
@@ -149,7 +158,7 @@ begin
       'implementation'#13#10'end.', LDiagnostics);
     try
       Assert.AreEqual(0, LDiagnostics.Count);
-      LConst := TDLConstSection(LUnit.Items[0]).Items[0];
+      LConst := TDLConstDecl(TDLConstSection(LUnit.Items[0]).Items[0]);
       Assert.AreEqual(3, LConst.Names.Count);
     finally
       LUnit.Free;
@@ -177,7 +186,7 @@ begin
       'implementation'#13#10'end.', LDiagnostics);
     try
       Assert.AreEqual(0, LDiagnostics.Count);
-      LVar := TDLVarSection(LUnit.Items[0]).Items[1];
+      LVar := TDLVarDecl(TDLVarSection(LUnit.Items[0]).Items[1]);
       Assert.IsNotNull(LVar.AbsoluteTarget);
     finally
       LUnit.Free;
@@ -201,7 +210,7 @@ begin
       'implementation'#13#10'end.', LDiagnostics);
     try
       Assert.AreEqual(0, LDiagnostics.Count);
-      LVar := TDLVarSection(LUnit.Items[0]).Items[0];
+      LVar := TDLVarDecl(TDLVarSection(LUnit.Items[0]).Items[0]);
       Assert.IsNotNull(LVar.Init);
       Assert.IsTrue(LVar.Init is TDLStringExpr);
     finally
@@ -226,7 +235,7 @@ begin
       'implementation'#13#10'end.', LDiagnostics);
     try
       Assert.AreEqual(0, LDiagnostics.Count);
-      LVar := TDLVarSection(LUnit.Items[0]).Items[0];
+      LVar := TDLVarDecl(TDLVarSection(LUnit.Items[0]).Items[0]);
       Assert.IsNotNull(LVar.Init);
     finally
       LUnit.Free;
@@ -491,10 +500,96 @@ begin
   end;
 end;
 
+procedure TTestConditionalConstVarDeclarations.ConditionalConstGroup;
+var
+  LDiagnostics: TDLDiagnostics;
+  LUnit: TDLCompilationUnit;
+  LSection: TDLConstSection;
+  LGroup: TDLConditionalGroup;
+begin
+  LDiagnostics := TDLDiagnostics.Create;
+  try
+    LUnit := ParseSource(
+      'unit U;'#13#10'interface'#13#10'const'#13#10+
+      '  A = 1;'#13#10+
+      '{$IFDEF POSIX}'#13#10+
+      '  B = 2;'#13#10+
+      '{$ELSE}'#13#10+
+      '  B = 3;'#13#10+
+      '{$ENDIF}'#13#10+
+      '  C = 4;'#13#10+
+      'implementation'#13#10'end.', LDiagnostics);
+    try
+      Assert.AreEqual(0, LDiagnostics.Count);
+      LSection := TDLConstSection(LUnit.Items[0]);
+      // A, [conditional group], C
+      Assert.AreEqual(3, LSection.Items.Count);
+      Assert.IsTrue(LSection.Items[0] is TDLConstDecl);
+      Assert.IsTrue(LSection.Items[1] is TDLConditionalGroup);
+      Assert.IsTrue(LSection.Items[2] is TDLConstDecl);
+      LGroup := TDLConditionalGroup(LSection.Items[1]);
+      Assert.AreEqual(2, LGroup.Branches.Count);
+      Assert.AreEqual('Defined(POSIX)', LGroup.Branches[0].Condition.ToString);
+      Assert.AreEqual(1, LGroup.Branches[0].Items.Count);
+      Assert.IsTrue(LGroup.Branches[0].Items[0] is TDLConstDecl);
+      Assert.AreEqual('B', TDLConstDecl(
+        LGroup.Branches[0].Items[0]).Names[0].Name);
+      Assert.AreEqual(ckAlways, LGroup.Branches[1].Condition.Kind);
+    finally
+      LUnit.Free;
+    end;
+  finally
+    LDiagnostics.Free;
+  end;
+end;
+
+procedure TTestConditionalConstVarDeclarations.ConditionalVarGroup;
+var
+  LDiagnostics: TDLDiagnostics;
+  LUnit: TDLCompilationUnit;
+  LSection: TDLVarSection;
+  LGroup: TDLConditionalGroup;
+begin
+  LDiagnostics := TDLDiagnostics.Create;
+  try
+    LUnit := ParseSource(
+      'unit U;'#13#10'interface'#13#10'var'#13#10+
+      '  X: Integer;'#13#10+
+      '{$IFDEF POSIX}'#13#10+
+      '  Y: Single;'#13#10+
+      '{$ELSE}'#13#10+
+      '  Y: Double;'#13#10+
+      '{$ENDIF}'#13#10+
+      '  Z: Byte;'#13#10+
+      'implementation'#13#10'end.', LDiagnostics);
+    try
+      Assert.AreEqual(0, LDiagnostics.Count);
+      LSection := TDLVarSection(LUnit.Items[0]);
+      Assert.AreEqual(3, LSection.Items.Count);
+      Assert.IsTrue(LSection.Items[0] is TDLVarDecl);
+      Assert.IsTrue(LSection.Items[1] is TDLConditionalGroup);
+      Assert.IsTrue(LSection.Items[2] is TDLVarDecl);
+      LGroup := TDLConditionalGroup(LSection.Items[1]);
+      Assert.AreEqual(2, LGroup.Branches.Count);
+      Assert.AreEqual('Defined(POSIX)', LGroup.Branches[0].Condition.ToString);
+      Assert.AreEqual(1, LGroup.Branches[0].Items.Count);
+      Assert.IsTrue(LGroup.Branches[0].Items[0] is TDLVarDecl);
+      Assert.AreEqual('Y', TDLVarDecl(
+        LGroup.Branches[0].Items[0]).Names[0].Name);
+      Assert.AreEqual(ckAlways, LGroup.Branches[1].Condition.Kind);
+    finally
+      LUnit.Free;
+    end;
+  finally
+    LDiagnostics.Free;
+  end;
+end;
+
 initialization
   TDUnitX.RegisterTestFixture(TTestConstDeclarations);
   TDUnitX.RegisterTestFixture(TTestVarDeclarations);
   TDUnitX.RegisterTestFixture(TTestConditionalTypeDeclarations);
+  TDUnitX.RegisterTestFixture(TTestConditionalConstVarDeclarations);
   TDUnitX.RegisterTestFixture(TTestAttributesDeclarations);
   TDUnitX.RegisterTestFixture(TTestClassDeclarations);
 

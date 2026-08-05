@@ -223,14 +223,15 @@ begin
       Assert.AreEqual(0, LDiagnostics.Count);
       Assert.IsTrue(LUnit.Items[0] is TDLConstSection);
       Assert.AreEqual(2, TDLConstSection(LUnit.Items[0]).Items.Count);
-      LConst := TDLConstSection(LUnit.Items[0]).Items[0];
+      LConst := TDLConstDecl(TDLConstSection(LUnit.Items[0]).Items[0]);
       Assert.AreEqual('A', LConst.Names[0].Name);
       Assert.IsTrue(LUnit.Items[1] is TDLVarSection);
       Assert.AreEqual(2, TDLVarSection(LUnit.Items[1]).Items.Count);
-      LVar := TDLVarSection(LUnit.Items[1]).Items[0];
+      LVar := TDLVarDecl(TDLVarSection(LUnit.Items[1]).Items[0]);
       Assert.AreEqual(2, LVar.Names.Count);
       Assert.AreEqual('Integer', TDLNamedType(LVar.TypeExpr).Name.Name);
-      Assert.IsNotNull(TDLVarSection(LUnit.Items[1]).Items[1].Init);
+      Assert.IsNotNull(TDLVarDecl(
+        TDLVarSection(LUnit.Items[1]).Items[1]).Init);
     finally
       LUnit.Free;
     end;

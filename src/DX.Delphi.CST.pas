@@ -803,12 +803,12 @@ type
   /// <summary>const section.</summary>
   TDLConstSection = class(TDLDeclItem)
   private
-    FItems: TList<TDLConstDecl>;
+    FItems: TList<TDLNode>;
   public
     constructor Create(ASpan: TDLSourceSpan);
     destructor Destroy; override;
     procedure Dump(ABuilder: TStringBuilder; AIndent: Integer); override;
-    property Items: TList<TDLConstDecl> read FItems;
+    property Items: TList<TDLNode> read FItems;
   end;
 
   /// <summary>resourcestring section.</summary>
@@ -843,13 +843,13 @@ type
   TDLVarSection = class(TDLDeclItem)
   private
     FIsThreadVar: Boolean;
-    FItems: TList<TDLVarDecl>;
+    FItems: TList<TDLNode>;
   public
     constructor Create(ASpan: TDLSourceSpan; AIsThreadVar: Boolean);
     destructor Destroy; override;
     procedure Dump(ABuilder: TStringBuilder; AIndent: Integer); override;
     property IsThreadVar: Boolean read FIsThreadVar;
-    property Items: TList<TDLVarDecl> read FItems;
+    property Items: TList<TDLNode> read FItems;
   end;
 
   /// <summary>A label declaration.</summary>
@@ -2558,7 +2558,7 @@ end;
 constructor TDLConstSection.Create(ASpan: TDLSourceSpan);
 begin
   inherited Create(ASpan);
-  FItems := TList<TDLConstDecl>.Create;
+  FItems := TList<TDLNode>.Create;
 end;
 
 destructor TDLConstSection.Destroy;
@@ -2569,7 +2569,7 @@ end;
 
 procedure TDLConstSection.Dump(ABuilder: TStringBuilder; AIndent: Integer);
 var
-  LItem: TDLConstDecl;
+  LItem: TDLNode;
 begin
   DumpHeader(ABuilder, AIndent, 'const');
   for LItem in FItems do
@@ -2649,7 +2649,7 @@ constructor TDLVarSection.Create(ASpan: TDLSourceSpan; AIsThreadVar: Boolean);
 begin
   inherited Create(ASpan);
   FIsThreadVar := AIsThreadVar;
-  FItems := TList<TDLVarDecl>.Create;
+  FItems := TList<TDLNode>.Create;
 end;
 
 destructor TDLVarSection.Destroy;
@@ -2660,7 +2660,7 @@ end;
 
 procedure TDLVarSection.Dump(ABuilder: TStringBuilder; AIndent: Integer);
 var
-  LItem: TDLVarDecl;
+  LItem: TDLNode;
 begin
   if FIsThreadVar then
     DumpHeader(ABuilder, AIndent, 'threadvar')

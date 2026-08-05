@@ -51,7 +51,7 @@ begin
       '  A = 1;'#13#10'implementation'#13#10'end.', LDiagnostics);
     try
       Assert.AreEqual(0, LDiagnostics.Count);
-      LConst := TDLConstSection(LUnit.Items[0]).Items[0];
+      LConst := TDLConstDecl(TDLConstSection(LUnit.Items[0]).Items[0]);
       Assert.IsTrue(LConst.TriviaCount > 0,
         'const should carry trivia');
     finally

@@ -43,6 +43,9 @@ uses
   DX.Delphi.Conditions;
 
 type
+  /// <summary>Item parser used inside a declaration conditional group.</summary>
+  TDLDeclItemParser = function: TDLNode of object;
+
   /// <summary>Recursive-descent parser: token stream -> CST.</summary>
   TDLDelphiParser = class
   private
@@ -92,7 +95,11 @@ type
     function CanStartConditionalGroup(ADeclGroup: Boolean): Boolean;
     function SingleConditionalInTrivia: Boolean;
     function ParseConditionalStatementGroup: TDLConditionalStmt;
-    function ParseConditionalTypeGroup: TDLConditionalGroup;
+    function ParseConditionalDeclGroup(
+      AItemParser: TDLDeclItemParser): TDLConditionalGroup;
+    function ParseTypeDeclNode: TDLNode;
+    function ParseConstDeclNode: TDLNode;
+    function ParseVarDeclNode: TDLNode;
     function IsQualifiedFollowedByDotDot: Boolean;
     function SectionLeadsToBody: Boolean;
     procedure SkipConditionalExpressionBranches;
@@ -726,7 +733,8 @@ begin
   Result := LGroup;
 end;
 
-function TDLDelphiParser.ParseConditionalTypeGroup: TDLConditionalGroup;
+function TDLDelphiParser.ParseConditionalDeclGroup(
+  AItemParser: TDLDeclItemParser): TDLConditionalGroup;
 var
   LGroup: TDLConditionalGroup;
   LBranch: TDLConditionalDeclBranch;
@@ -737,8 +745,9 @@ var
   LFoundEndIf: Boolean;
   j: Integer;
 begin
-  // Current token carries a conditional-start directive; the following type
-  // declarations form a conditional group with one branch per path.
+  // Current token carries a conditional-start directive; the following
+  // declarations (types, consts, vars ...) form a conditional group with one
+  // branch per path. AItemParser parses one declaration of the section kind.
   LGroup := TDLConditionalGroup.Create(GetSpan);
   LCond := nil;
   LastConditionalDirective(LCond);
@@ -749,7 +758,7 @@ begin
   begin
     if GetKind = tkEOF then
     begin
-      Error('Unterminated conditional type group');
+      Error('Unterminated conditional declaration group');
       Break;
     end;
     // Process every conditional directive on the current token in source
@@ -783,7 +792,7 @@ begin
     if (GetKind = tkIdentifier) or IsSoftNameKeyword then
     begin
       LPrevPos := FPos;
-      LBranch.Items.Add(ParseTypeDecl);
+      LBranch.Items.Add(AItemParser);
       if FPos = LPrevPos then
         Advance; // resynchronise
     end
@@ -1301,7 +1310,7 @@ begin
       // A clean conditional group: {$IFDEF X} A = ...; {$ELSE} B = ...; {$ENDIF}
       if HasConditionalStartTrivia and CanStartConditionalGroup(True) and
          SingleConditionalInTrivia then
-        LSection.Items.Add(ParseConditionalTypeGroup)
+        LSection.Items.Add(ParseConditionalDeclGroup(ParseTypeDeclNode))
       else if LSawConditional and IsSymbolAhead('=', 1) and
          not ((Peek(2).Kind = tkInteger) and
               (Peek(3).Kind = tkSymbol) and (Peek(3).Text = '..')) and
@@ -1396,6 +1405,11 @@ begin
   end;
 end;
 
+function TDLDelphiParser.ParseTypeDeclNode: TDLNode;
+begin
+  Result := ParseTypeDecl;
+end;
+
 function TDLDelphiParser.ParseTypeParams(ANames: TList<TDLIdentifier>): Boolean;
 begin
   // <T, U: constraint>
@@ -1452,14 +1466,25 @@ begin
         (Peek(2).Text = 'object')) then
       Break;
     if (GetKind = tkIdentifier) or IsSoftNameKeyword then
-      LSection.Items.Add(ParseConstDecl)
+    begin
+      // A clean conditional group: {$IFDEF X} A = ...; {$ELSE} A = ...; {$ENDIF}
+      if HasConditionalStartTrivia and CanStartConditionalGroup(True) and
+         SingleConditionalInTrivia then
+        LSection.Items.Add(ParseConditionalDeclGroup(ParseConstDeclNode))
+      else
+        LSection.Items.Add(ParseConstDecl);
+    end
     else
       Break;
     if FPos = LPrevPos then
       Advance; // resynchronise
     // Skip alternate branches of conditional compilation in const value
     // position:  X = {$IFDEF A}1{$ELSE}2{$ENDIF};
+    // A clean declaration group ({$IFDEF X} B = ...; {$ELSE} B = ...;
+    // {$ENDIF}) is handled by the outer loop as a structural group; do not
+    // skip its branches here.
     while HasConditionalStartTrivia and
+          not (CanStartConditionalGroup(True) and SingleConditionalInTrivia) and
           ((GetKind in [tkString, tkInteger, tkFloat, tkCharCode]) or
            IsIdentifier or IsSymbol('[')) do
     begin
@@ -1573,6 +1598,11 @@ begin
   Result := LDecl;
 end;
 
+function TDLDelphiParser.ParseConstDeclNode: TDLNode;
+begin
+  Result := ParseConstDecl;
+end;
+
 function TDLDelphiParser.ParseResStringSection: TDLResStringSection;
 var
   LSection: TDLResStringSection;
@@ -1611,7 +1641,15 @@ begin
       Continue;
     end;
     if IsIdentifier or IsSoftNameKeyword then
-      LSection.Items.Add(ParseVarDecl)
+    begin
+      // A clean conditional group:
+      //   {$IFDEF X} A: T; {$ELSE} A: U; {$ENDIF}
+      if HasConditionalStartTrivia and CanStartConditionalGroup(True) and
+         SingleConditionalInTrivia then
+        LSection.Items.Add(ParseConditionalDeclGroup(ParseVarDeclNode))
+      else
+        LSection.Items.Add(ParseVarDecl);
+    end
     else
       Break;
     if FPos = LPrevPos then
@@ -1746,6 +1784,11 @@ begin
   end;
   ExpectSemicolon;
   Result := LSection;
+end;
+
+function TDLDelphiParser.ParseVarDeclNode: TDLNode;
+begin
+  Result := ParseVarDecl;
 end;
 
 function TDLDelphiParser.ParseAttributes: TList<TDLAttribute>;
