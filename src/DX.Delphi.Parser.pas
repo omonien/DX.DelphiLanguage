@@ -1160,6 +1160,13 @@ begin
     else
     begin
       LItem := ParseDeclItem(not LInInterface);
+      // Conditional branches at module level that were not consumed by the
+      // declaration itself (e.g. conditional function bodies:
+      //   function F(...); {$IFDEF X} begin ... end; {$ELSE} asm ... end;
+      //   {$ENDIF}) are skipped so parsing resumes cleanly after the
+      // matching {$ENDIF}.
+      if HasConditionalBranchTrivia then
+        SkipConditionalBranchesToEndIf;
       if (FPos = LPrevPos) and (LItem = nil) then
         Advance; // resynchronise
       if LItem <> nil then
@@ -1768,6 +1775,14 @@ begin
     Advance;
     LDecl.TypeExpr := ParseTypeExpr;
   end;
+  // var X: T platform = value;  (directive between type and initializer)
+  while IsKeyword(kwPlatform) or IsKeyword(kwDeprecated) or
+        IsKeyword(kwExperimental) do
+  begin
+    Advance;
+    if GetKind = tkString then
+      ParseStringSequence.Free;
+  end;
   if IsKeyword(kwAbsolute) then
   begin
     Advance;
@@ -1794,6 +1809,19 @@ begin
     end
     else
       LDecl.Init := ParseExpression;
+  end;
+  // A var initializer may be split by conditional compilation:
+  //   X: T = {$IFDEF A}1{$ENDIF} {$IFDEF B}2{$ENDIF};
+  while HasConditionalStartTrivia and
+        ((GetKind in [tkString, tkInteger, tkFloat, tkCharCode]) or
+         IsIdentifier or IsSymbol('[')) do
+  begin
+    if (IsIdentifier or IsSoftNameKeyword) and
+       (IsSymbolAhead('=', 1) or IsSymbolAhead(':', 1)) then
+      Break; // a new declaration, not an alternate branch value
+    ParseExpression.Free;
+    if IsSymbol(';') then
+      Break; // the terminating ';' is consumed by ExpectSemicolon below
   end;
   if IsSymbol(':=') then
   begin
@@ -1946,6 +1974,7 @@ var
   LIsPacked: Boolean;
   LBoundExpr: TDLExpr;
   LBoundHigh: TDLExpr;
+  LName: string;
 begin
   Inc(FStmtDepth);
   if FStmtDepth > 200 then
@@ -2036,6 +2065,13 @@ begin
           Result := TDLStringType.Create(LStart, ParseExpression);
           ExpectSymbol(']');
         end
+        else if IsSymbol('(') then
+        begin
+          // string(codepage) / string(length)
+          Advance;
+          Result := TDLStringType.Create(LStart, ParseExpression);
+          ExpectSymbol(')');
+        end
         else
           Result := TDLStringType.Create(LStart, nil);
       end;
@@ -2091,7 +2127,27 @@ begin
          ((GetKind = tkIdentifier) and IsQualifiedFollowedByDotDot) then
         Result := ParseSubrangeType
       else
+      begin
         Result := ParseNamedType;
+        // String type with a codepage/length argument:
+        //   AnsiString(65001), RawByteString($ffff)
+        if IsSymbol('(') and (Result is TDLNamedType) then
+        begin
+          LName := LowerCase(TDLNamedType(Result).Name.Name);
+          if (LName = 'ansistring') or (LName = '_ansistring') or
+             (LName = 'widestring') or (LName = '_widestring') or
+             (LName = '_widestr') or (LName = 'shortstring') or
+             (LName = '_shortstring') or (LName = '_shortstr') or
+             (LName = 'unicodestring') or (LName = '_unicodestring') or
+             (LName = 'rawbytestring') or (LName = 'utf8string') or
+             (LName = 'string') then
+          begin
+            Advance;
+            ParseExpression.Free;
+            ExpectSymbol(')');
+          end;
+        end;
+      end;
     end
     else if (GetKind = tkInteger) or (GetKind = tkString) or
             (GetKind = tkCharCode) or
@@ -2362,7 +2418,7 @@ begin
         Advance;
         LBranch.VariantPart := ParseVariantSection;
       end
-      else if IsIdentifier then
+      else if IsIdentifier or IsSoftNameKeyword then
       begin
         LBranch.Fields.Add(ParseFieldDeclBody);
         if IsSymbol(';') then
@@ -2383,7 +2439,7 @@ begin
       while (GetKind <> tkEOF) and (not IsSymbol(')')) and
             (not IsKeyword(kwEnd)) do
       begin
-        if IsIdentifier then
+        if IsIdentifier or IsSoftNameKeyword then
         begin
           ParseFieldDeclBody.Free;
           if IsSymbol(';') then
@@ -3571,10 +3627,10 @@ begin
   if FStmtDepth > 200 then
     raise Exception.Create('DLP-FATAL: statement recursion at "' + GetText +
       '" line=' + IntToStr(GetSpan.Start.Line));
+  try
   if IsSymbol(';') then
   begin
     Result := TDLEmptyStmt.Create(LStart);
-    Dec(FStmtDepth);
     Exit;
   end;
   LKeyword := GetKeyword;
@@ -3643,7 +3699,9 @@ begin
         Result := TDLExprStmt.Create(LStart, LExpression);
     end;
   end;
-  Dec(FStmtDepth);
+  finally
+    Dec(FStmtDepth);
+  end;
 end;
 
 function TDLDelphiParser.ParseCompoundStmt: TDLCompoundStmt;
