@@ -827,6 +827,21 @@ begin
       Error(Format('Unexpected "%s" in uses clause', [GetText]));
   end;
   ExpectSemicolon;
+  // Alternate conditional uses branches:  uses A; {$ELSE} uses B; {$ENDIF}
+  while HasConditionalStartTrivia do
+  begin
+    while (GetKind <> tkEOF) and (not IsSymbol(';')) and
+          not (IsKeyword(kwImplementation) or IsKeyword(kwInterface) or
+               IsKeyword(kwType) or IsKeyword(kwVar) or IsKeyword(kwConst) or
+               IsKeyword(kwEnd) or IsKeyword(kwInitialization) or
+               IsKeyword(kwFinalization) or IsKeyword(kwFunction) or
+               IsKeyword(kwProcedure)) do
+      Advance;
+    if IsSymbol(';') then
+      Advance
+    else
+      Break;
+  end;
   Result := LClause;
 end;
 
@@ -2131,7 +2146,18 @@ begin
   LAttributes := nil;
   if IsSymbol('[') then
     LAttributes := ParseAttributes;
-  if IsKeyword(kwConst) then
+  if HasConditionalStartTrivia and
+     ((IsIdentifier and (LowerCase(GetText) = 'constref')) or
+      (IsKeyword(kwConst) and (Peek(1).Kind = tkKeyword))) then
+  begin
+    // Conditional parameter modifier: {$IFDEF A}constref{$ELSE}const{$ENDIF}
+    LModifier := pmConst; // keep the first branch
+    while HasConditionalStartTrivia and
+          (IsIdentifier or IsKeyword(kwConst) or IsKeyword(kwVar) or
+           IsKeyword(kwOut)) do
+      Advance;
+  end
+  else if IsKeyword(kwConst) then
   begin
     Advance;
     if IsKeyword(kwRef) then
@@ -2631,7 +2657,11 @@ begin
     if IsKeyword(kwAsm) then
       LImpl.Body := ParseAsmStmt
     else
+    begin
+      if HasConditionalStartTrivia then
+        LBodyConditional := True;
       LImpl.Body := ParseCompoundStmt;
+    end;
     ExpectSemicolon;
     // Conditional compilation may split one method body into several
     // begin...end; blocks ({$IFDEF X} var..begin..end; {$ENDIF}). Parse every
@@ -2820,7 +2850,8 @@ begin
     end;
     if IsIdentifier and
        ((LowerCase(LText) = 'winapi') or (LowerCase(LText) = 'export') or
-        (LowerCase(LText) = 'delayed') or (LowerCase(LText) = 'safecall')) then
+        (LowerCase(LText) = 'delayed') or (LowerCase(LText) = 'safecall') or
+        (LowerCase(LText) = 'local')) then
     begin
       LName := MakeIdentifier;
       LDirective := TDLDirective.Create(LName.Span, LName);
@@ -2846,7 +2877,8 @@ begin
     LText := GetText;
     Result := IsIdentifier and
       ((LowerCase(LText) = 'winapi') or (LowerCase(LText) = 'export') or
-       (LowerCase(LText) = 'delayed') or (LowerCase(LText) = 'dispid'));
+       (LowerCase(LText) = 'delayed') or (LowerCase(LText) = 'dispid') or
+       (LowerCase(LText) = 'local'));
   end;
 end;
 
@@ -3288,6 +3320,16 @@ begin
     LIndex := 1;
     while (Peek(LIndex).Kind = tkSymbol) and (Peek(LIndex).Text = '.') do
       Inc(LIndex, 2);
+    // Case label with 'or'/'and':  A or B or C:
+    while (Peek(LIndex).Kind = tkKeyword) and
+          ((Peek(LIndex).Text = 'or') or (Peek(LIndex).Text = 'and')) do
+      Inc(LIndex, 2);
+    // with '+'/'-':  A + B, A - B:
+    while (Peek(LIndex).Kind = tkSymbol) and
+          ((Peek(LIndex).Text = '+') or (Peek(LIndex).Text = '-')) and
+          ((Peek(LIndex + 1).Kind = tkIdentifier) or
+           (Peek(LIndex + 1).Kind = tkKeyword)) do
+      Inc(LIndex, 2);
     // Case label may be a call:  SizeOf(Byte):
     if (Peek(LIndex).Kind = tkSymbol) and (Peek(LIndex).Text = '(') then
     begin
@@ -3480,9 +3522,17 @@ begin
           LHandler.VarName := MakeIdentifier;
           ExpectSymbol(':');
           LHandler.TypeName := MakeIdentifier;
+          LTypeName := LHandler.TypeName;
+          ExpandDottedName(LTypeName); // on E: System.SysUtils.Exxx
+          LHandler.TypeName := LTypeName;
         end
         else if IsIdentifier then
+        begin
           LHandler.TypeName := MakeIdentifier;
+          LTypeName := LHandler.TypeName;
+          ExpandDottedName(LTypeName); // on System.SysUtils.Exxx do
+          LHandler.TypeName := LTypeName;
+        end;
         ExpectKeyword(kwDo);
         FDirectiveStmt := False;
         LHandler.Body := ParseStatement;
