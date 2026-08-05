@@ -104,7 +104,7 @@ begin
     try
       Assert.AreEqual(0, LDiagnostics.Count);
       LClass := TDLClassType(
-        TDLTypeSection(LUnit.Items[0]).Items[0].TypeExpr);
+        TDLTypeDecl(TDLTypeSection(LUnit.Items[0]).Items[0]).TypeExpr);
       LProperty := nil;
       for LMember in LClass.Members do
         if LMember is TDLPropertyDecl then
@@ -144,7 +144,7 @@ begin
     try
       Assert.AreEqual(0, LDiagnostics.Count);
       LClass := TDLClassType(
-        TDLTypeSection(LUnit.Items[0]).Items[0].TypeExpr);
+        TDLTypeDecl(TDLTypeSection(LUnit.Items[0]).Items[0]).TypeExpr);
       LProperty := nil;
       for LMember in LClass.Members do
         if LMember is TDLPropertyDecl then
@@ -179,7 +179,7 @@ begin
     try
       Assert.AreEqual(0, LDiagnostics.Count);
       LClass := TDLClassType(
-        TDLTypeSection(LUnit.Items[0]).Items[0].TypeExpr);
+        TDLTypeDecl(TDLTypeSection(LUnit.Items[0]).Items[0]).TypeExpr);
       LProperty := nil;
       for LMember in LClass.Members do
         if LMember is TDLPropertyDecl then
@@ -213,7 +213,7 @@ begin
     try
       Assert.AreEqual(0, LDiagnostics.Count);
       LMethod := TDLMethodDecl(
-        TDLClassType(TDLTypeSection(LUnit.Items[0]).Items[0].TypeExpr)
+        TDLClassType(TDLTypeDecl(TDLTypeSection(LUnit.Items[0]).Items[0]).TypeExpr)
           .Members[0]);
       Assert.AreEqual(1, LMethod.Directives.Count);
       LDirective := LMethod.Directives[0];
@@ -343,7 +343,7 @@ begin
     try
       Assert.AreEqual(0, LDiagnostics.Count);
       LMethod := TDLMethodDecl(
-        TDLRecordType(TDLTypeSection(LUnit.Items[0]).Items[0].TypeExpr)
+        TDLRecordType(TDLTypeDecl(TDLTypeSection(LUnit.Items[0]).Items[0]).TypeExpr)
           .Members[0]);
       Assert.AreEqual('Add', LMethod.Name.Name);
       Assert.IsNotNull(LMethod.ReturnType);
@@ -371,7 +371,7 @@ begin
     try
       Assert.AreEqual(0, LDiagnostics.Count);
       LMethod := TDLMethodDecl(
-        TDLRecordType(TDLTypeSection(LUnit.Items[0]).Items[0].TypeExpr)
+        TDLRecordType(TDLTypeDecl(TDLTypeSection(LUnit.Items[0]).Items[0]).TypeExpr)
           .Members[0]);
       Assert.AreEqual('Explicit', LMethod.Name.Name);
       Assert.AreEqual(prOperator, LMethod.Kind);

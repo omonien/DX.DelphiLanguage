@@ -256,10 +256,10 @@ begin
       Assert.AreEqual(0, LDiagnostics.Count);
       LSection := TDLTypeSection(LUnit.Items[0]);
       Assert.AreEqual(2, LSection.Items.Count);
-      Assert.AreEqual('TInt', LSection.Items[0].Name.Name);
-      Assert.IsTrue(LSection.Items[1].TypeExpr is TDLStaticArrayType);
+      Assert.AreEqual('TInt', TDLTypeDecl(LSection.Items[0]).Name.Name);
+      Assert.IsTrue(TDLTypeDecl(LSection.Items[1]).TypeExpr is TDLStaticArrayType);
       Assert.AreEqual(1, TDLStaticArrayType(
-        LSection.Items[1].TypeExpr).Bounds.Count);
+        TDLTypeDecl(LSection.Items[1]).TypeExpr).Bounds.Count);
     finally
       LUnit.Free;
     end;
@@ -341,7 +341,7 @@ begin
       LDiagnostics);
     try
       Assert.AreEqual(0, LDiagnostics.Count);
-      LClass := TDLClassType(TDLTypeSection(LUnit.Items[0]).Items[0].TypeExpr);
+      LClass := TDLClassType(TDLTypeDecl(TDLTypeSection(LUnit.Items[0]).Items[0]).TypeExpr);
       Assert.IsNotNull(LClass.BaseType);
       LFoundMethod := False;
       for LMember in LClass.Members do
@@ -379,7 +379,7 @@ begin
       LDiagnostics);
     try
       Assert.AreEqual(0, LDiagnostics.Count);
-      LRecord := TDLRecordType(TDLTypeSection(LUnit.Items[0]).Items[0].TypeExpr);
+      LRecord := TDLRecordType(TDLTypeDecl(TDLTypeSection(LUnit.Items[0]).Items[0]).TypeExpr);
       Assert.IsNotNull(LRecord.VariantPart);
       Assert.AreEqual('Kind', LRecord.VariantPart.Tag.Name);
       Assert.AreEqual(2, LRecord.VariantPart.Variants.Count);
@@ -412,10 +412,10 @@ begin
       LDiagnostics);
     try
       Assert.AreEqual(0, LDiagnostics.Count);
-      LHelper := TDLClassType(TDLTypeSection(LUnit.Items[0]).Items[0].TypeExpr);
+      LHelper := TDLClassType(TDLTypeDecl(TDLTypeSection(LUnit.Items[0]).Items[0]).TypeExpr);
       Assert.IsTrue(LHelper.IsHelper);
       Assert.IsNotNull(LHelper.HelperFor);
-      LHelper := TDLClassType(TDLTypeSection(LUnit.Items[0]).Items[1].TypeExpr);
+      LHelper := TDLClassType(TDLTypeDecl(TDLTypeSection(LUnit.Items[0]).Items[1]).TypeExpr);
       Assert.IsTrue(LHelper.IsHelper);
       Assert.AreEqual(1, LHelper.Members.Count);
     finally
@@ -446,7 +446,7 @@ begin
       LDiagnostics);
     try
       Assert.AreEqual(0, LDiagnostics.Count);
-      LClass := TDLClassType(TDLTypeSection(LUnit.Items[0]).Items[0].TypeExpr);
+      LClass := TDLClassType(TDLTypeDecl(TDLTypeSection(LUnit.Items[0]).Items[0]).TypeExpr);
       // 4 members: private/public visibility markers + FItems field + Add method
       Assert.AreEqual(4, LClass.Members.Count);
       Assert.IsTrue(LClass.Members[1] is TDLFieldDecl);
@@ -476,12 +476,12 @@ begin
     try
       Assert.AreEqual(0, LDiagnostics.Count);
       LProcType := TDLProceduralType(
-        TDLTypeSection(LUnit.Items[0]).Items[0].TypeExpr);
+        TDLTypeDecl(TDLTypeSection(LUnit.Items[0]).Items[0]).TypeExpr);
       Assert.IsTrue(LProcType.IsReferenceTo);
       Assert.AreEqual(prFunction, LProcType.Kind);
       Assert.AreEqual(1, LProcType.Params.Count);
       LProcType := TDLProceduralType(
-        TDLTypeSection(LUnit.Items[0]).Items[1].TypeExpr);
+        TDLTypeDecl(TDLTypeSection(LUnit.Items[0]).Items[1]).TypeExpr);
       Assert.IsTrue(LProcType.IsOfObject);
     finally
       LUnit.Free;

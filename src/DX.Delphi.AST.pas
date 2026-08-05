@@ -112,6 +112,9 @@ type
 
   TDLDeclaration = class;
 
+  TDLConditionalDeclBranch = class;
+  TDLConditionalDeclGroup = class;
+
   /// <summary>A compilation module (program/unit/library/package).</summary>
   TDLModule = class abstract(TDLNode)
   private
@@ -136,6 +139,33 @@ type
 
   /// <summary>A declaration at module scope.</summary>
   TDLDeclaration = class abstract(TDLNode)
+  end;
+
+  /// <summary>One branch of a conditional declaration group in the AST.</summary>
+  TDLConditionalDeclBranch = class(TDLNode)
+  private
+    FCondition: TDLCondition;
+    FItems: TList<TDLDeclaration>;
+  public
+    constructor Create(ASpan: TDLSourceSpan; ACondition: TDLCondition);
+    destructor Destroy; override;
+    procedure Dump(ABuilder: TStringBuilder; AIndent: Integer); override;
+    property Condition: TDLCondition read FCondition;
+    property Items: TList<TDLDeclaration> read FItems;
+  end;
+
+  /// <summary>
+  ///  A conditional declaration group in the AST (type/const/var branches
+  ///  kept structurally; a projection selects the active path).
+  /// </summary>
+  TDLConditionalDeclGroup = class(TDLDeclaration)
+  private
+    FBranches: TList<TDLConditionalDeclBranch>;
+  public
+    constructor Create(ASpan: TDLSourceSpan);
+    destructor Destroy; override;
+    procedure Dump(ABuilder: TStringBuilder; AIndent: Integer); override;
+    property Branches: TList<TDLConditionalDeclBranch> read FBranches;
   end;
 
   /// <summary>A type definition (right-hand side of 'Name = ...').</summary>
@@ -2354,6 +2384,60 @@ var
   LBranch: TDLConditionalBranch;
 begin
   DumpHeader(ABuilder, AIndent, 'conditional');
+  for LBranch in FBranches do
+    LBranch.Dump(ABuilder, AIndent + 1);
+end;
+
+{ TDLConditionalDeclBranch }
+
+constructor TDLConditionalDeclBranch.Create(ASpan: TDLSourceSpan;
+  ACondition: TDLCondition);
+begin
+  inherited Create(ASpan);
+  FCondition := ACondition;
+  FItems := TList<TDLDeclaration>.Create;
+end;
+
+destructor TDLConditionalDeclBranch.Destroy;
+begin
+  FCondition.Free;
+  FItems.Free;
+  inherited Destroy;
+end;
+
+procedure TDLConditionalDeclBranch.Dump(ABuilder: TStringBuilder;
+  AIndent: Integer);
+var
+  LItem: TDLDeclaration;
+begin
+  if FCondition = nil then
+    DumpHeader(ABuilder, AIndent, 'decl-branch')
+  else
+    DumpHeader(ABuilder, AIndent, 'decl-branch ' + FCondition.ToString);
+  for LItem in FItems do
+    LItem.Dump(ABuilder, AIndent + 1);
+end;
+
+{ TDLConditionalDeclGroup }
+
+constructor TDLConditionalDeclGroup.Create(ASpan: TDLSourceSpan);
+begin
+  inherited Create(ASpan);
+  FBranches := TList<TDLConditionalDeclBranch>.Create;
+end;
+
+destructor TDLConditionalDeclGroup.Destroy;
+begin
+  FBranches.Free;
+  inherited Destroy;
+end;
+
+procedure TDLConditionalDeclGroup.Dump(ABuilder: TStringBuilder;
+  AIndent: Integer);
+var
+  LBranch: TDLConditionalDeclBranch;
+begin
+  DumpHeader(ABuilder, AIndent, 'conditional-decls');
   for LBranch in FBranches do
     LBranch.Dump(ABuilder, AIndent + 1);
 end;

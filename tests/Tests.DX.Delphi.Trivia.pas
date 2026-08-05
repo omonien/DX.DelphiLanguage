@@ -147,7 +147,7 @@ begin
     try
       Assert.AreEqual(0, LDiagnostics.Count);
       LClass := TDLClassType(
-        TDLTypeSection(LUnit.Items[0]).Items[0].TypeExpr);
+        TDLTypeDecl(TDLTypeSection(LUnit.Items[0]).Items[0]).TypeExpr);
       LMethod := TDLMethodDecl(LClass.Members[0]);
       Assert.IsTrue(LMethod.TriviaCount > 0,
         'method should carry the comment as trivia');

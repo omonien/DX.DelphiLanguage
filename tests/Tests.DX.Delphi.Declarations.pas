@@ -14,7 +14,8 @@ uses
   System.SysUtils,
   DUnitX.TestFramework,
   DX.Delphi.Core,
-  DX.Delphi.CST;
+  DX.Delphi.CST,
+  DX.Delphi.Conditions;
 
 type
   [TestFixture]
@@ -37,6 +38,15 @@ type
     procedure VarWithInit;
     [Test]
     procedure ThreadVarWithInit;
+  end;
+
+  [TestFixture]
+  TTestConditionalTypeDeclarations = class
+  public
+    [Test]
+    procedure ConditionalTypeGroup;
+    [Test]
+    procedure ConditionalTypeGroupProjection;
   end;
 
   [TestFixture]
@@ -266,7 +276,7 @@ begin
     try
       // attributes on type declarations are parsed; the section carries them
       Assert.AreEqual(0, LDiagnostics.Count);
-      LDecl := TDLTypeSection(LUnit.Items[0]).Items[0];
+      LDecl := TDLTypeDecl(TDLTypeSection(LUnit.Items[0]).Items[0]);
       Assert.AreEqual('TFoo', LDecl.Name.Name);
     finally
       LUnit.Free;
@@ -293,7 +303,7 @@ begin
     try
       Assert.AreEqual(0, LDiagnostics.Count);
       LClass := TDLClassType(
-        TDLTypeSection(LUnit.Items[0]).Items[0].TypeExpr);
+        TDLTypeDecl(TDLTypeSection(LUnit.Items[0]).Items[0]).TypeExpr);
       Assert.IsNotNull(LClass.BaseType);
       Assert.AreEqual('TInterfacedObject',
         TDLNamedType(LClass.BaseType).Name.Name);
@@ -320,7 +330,7 @@ begin
     try
       Assert.AreEqual(0, LDiagnostics.Count);
       LClass := TDLClassType(
-        TDLTypeSection(LUnit.Items[0]).Items[0].TypeExpr);
+        TDLTypeDecl(TDLTypeSection(LUnit.Items[0]).Items[0]).TypeExpr);
       Assert.IsTrue(LClass.IsInterface);
       Assert.IsNotNull(LClass.BaseType);
     finally
@@ -353,7 +363,7 @@ begin
     try
       Assert.AreEqual(0, LDiagnostics.Count);
       LClass := TDLClassType(
-        TDLTypeSection(LUnit.Items[0]).Items[0].TypeExpr);
+        TDLTypeDecl(TDLTypeSection(LUnit.Items[0]).Items[0]).TypeExpr);
       LFoundMethod := False;
       for LMember in LClass.Members do
         if LMember is TDLMethodDecl then
@@ -382,7 +392,7 @@ begin
     try
       Assert.AreEqual(0, LDiagnostics.Count);
       LProc := TDLProceduralType(
-        TDLTypeSection(LUnit.Items[0]).Items[0].TypeExpr);
+        TDLTypeDecl(TDLTypeSection(LUnit.Items[0]).Items[0]).TypeExpr);
       Assert.AreEqual(prFunction, LProc.Kind);
       Assert.AreEqual(1, LProc.Params.Count);
       Assert.AreEqual(1, LProc.Directives.Count);
@@ -394,9 +404,97 @@ begin
   end;
 end;
 
+procedure TTestConditionalTypeDeclarations.ConditionalTypeGroup;
+var
+  LDiagnostics: TDLDiagnostics;
+  LUnit: TDLCompilationUnit;
+  LSection: TDLTypeSection;
+  LGroup: TDLConditionalGroup;
+begin
+  LDiagnostics := TDLDiagnostics.Create;
+  try
+    LUnit := ParseSource(
+      'unit U;'#13#10'interface'#13#10'type'#13#10+
+      '  A = Integer;'#13#10+
+      '{$IFDEF POSIX}'#13#10+
+      '  B = Single;'#13#10+
+      '{$ELSE}'#13#10+
+      '  B = Double;'#13#10+
+      '{$ENDIF}'#13#10+
+      '  C = Cardinal;'#13#10+
+      'implementation'#13#10'end.', LDiagnostics);
+    try
+      Assert.AreEqual(0, LDiagnostics.Count);
+      LSection := TDLTypeSection(LUnit.Items[0]);
+      // A, [conditional group], C
+      Assert.AreEqual(3, LSection.Items.Count);
+      Assert.IsTrue(LSection.Items[0] is TDLTypeDecl);
+      Assert.IsTrue(LSection.Items[1] is TDLConditionalGroup);
+      Assert.IsTrue(LSection.Items[2] is TDLTypeDecl);
+      LGroup := TDLConditionalGroup(LSection.Items[1]);
+      Assert.AreEqual(2, LGroup.Branches.Count);
+      Assert.AreEqual('Defined(POSIX)', LGroup.Branches[0].Condition.ToString);
+      Assert.AreEqual(1, LGroup.Branches[0].Items.Count);
+      Assert.AreEqual(ckAlways, LGroup.Branches[1].Condition.Kind);
+      Assert.AreEqual(1, LGroup.Branches[1].Items.Count);
+    finally
+      LUnit.Free;
+    end;
+  finally
+    LDiagnostics.Free;
+  end;
+end;
+
+procedure TTestConditionalTypeDeclarations.ConditionalTypeGroupProjection;
+var
+  LDiagnostics: TDLDiagnostics;
+  LUnit: TDLCompilationUnit;
+  LSection: TDLTypeSection;
+  LGroup: TDLConditionalGroup;
+  LDefines: TDLDefineSet;
+  LActive: TDLConditionalDeclBranch;
+  i: Integer;
+begin
+  LDiagnostics := TDLDiagnostics.Create;
+  try
+    LUnit := ParseSource(
+      'unit U;'#13#10'interface'#13#10'type'#13#10+
+      '{$IFDEF POSIX}'#13#10+
+      '  B = Single;'#13#10+
+      '{$ELSE}'#13#10+
+      '  B = Double;'#13#10+
+      '{$ENDIF}'#13#10+
+      'implementation'#13#10'end.', LDiagnostics);
+    try
+      LSection := TDLTypeSection(LUnit.Items[0]);
+      LGroup := TDLConditionalGroup(LSection.Items[0]);
+      LDefines := TDLDefineSet.Create;
+      try
+        LActive := nil;
+        for i := 0 to LGroup.Branches.Count - 1 do
+          if LGroup.Branches[i].Condition.Evaluate(LDefines) then
+          begin
+            LActive := LGroup.Branches[i];
+            Break;
+          end;
+        // Empty configuration: the {$ELSE} branch (Double) is active.
+        Assert.IsNotNull(LActive);
+        Assert.AreEqual(1, LActive.Items.Count);
+      finally
+        LDefines.Free;
+      end;
+    finally
+      LUnit.Free;
+    end;
+  finally
+    LDiagnostics.Free;
+  end;
+end;
+
 initialization
   TDUnitX.RegisterTestFixture(TTestConstDeclarations);
   TDUnitX.RegisterTestFixture(TTestVarDeclarations);
+  TDUnitX.RegisterTestFixture(TTestConditionalTypeDeclarations);
   TDUnitX.RegisterTestFixture(TTestAttributesDeclarations);
   TDUnitX.RegisterTestFixture(TTestClassDeclarations);
 

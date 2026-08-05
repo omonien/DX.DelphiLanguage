@@ -87,9 +87,12 @@ type
     function HasConditionalContinuationTrivia: Boolean;
     function LastConditionalDirective(out ACondition: TDLCondition)
       : TDLConditionDirectiveKind;
-    function CanStartConditionalGroup: Boolean;
+    function FirstConditionalDirective(out ACondition: TDLCondition)
+      : TDLConditionDirectiveKind;
+    function CanStartConditionalGroup(ADeclGroup: Boolean): Boolean;
     function SingleConditionalInTrivia: Boolean;
     function ParseConditionalStatementGroup: TDLConditionalStmt;
+    function ParseConditionalTypeGroup: TDLConditionalGroup;
     function IsQualifiedFollowedByDotDot: Boolean;
     function SectionLeadsToBody: Boolean;
     procedure SkipConditionalExpressionBranches;
@@ -506,7 +509,37 @@ begin
     end;
 end;
 
-function TDLDelphiParser.CanStartConditionalGroup: Boolean;
+function TDLDelphiParser.FirstConditionalDirective(
+  out ACondition: TDLCondition): TDLConditionDirectiveKind;
+var
+  i: Integer;
+  LCond: TDLCondition;
+  LKind: TDLConditionDirectiveKind;
+begin
+  // Examine the leading trivia of the current token and return the FIRST
+  // conditional directive (the outermost one). Inside a conditional group
+  // loop this is the directive that belongs to the group itself; later
+  // directives on the same token belong to nested groups that the enclosing
+  // parsing level will handle.
+  Result := cdNone;
+  ACondition := nil;
+  for i := 0 to GetCur.LeadingTrivia.Count - 1 do
+    if GetCur.LeadingTrivia[i].Kind = trDirective then
+    begin
+      LCond := nil;
+      LKind := ClassifyDirective(GetCur.LeadingTrivia[i].Text, LCond);
+      if LKind <> cdNone then
+      begin
+        ACondition := LCond;
+        Result := LKind;
+        Exit;
+      end
+      else
+        LCond.Free;
+    end;
+end;
+
+function TDLDelphiParser.CanStartConditionalGroup(ADeclGroup: Boolean): Boolean;
 var
   i: Integer;
   LParenDepth: Integer;
@@ -541,12 +574,32 @@ begin
           if (LKind = cdElseIf) or (LKind = cdElse) or (LKind = cdEndIf) then
           begin
             // The branch marker must follow a ';' at paren depth 0 and
-            // statement depth 0.
-            Result := (i > 0) and (LParenDepth = 0) and (LStmtDepth = 0) and
-                      (Peek(i - 1).Kind = tkSymbol) and
-                      (Peek(i - 1).Text = ';');
-            Exit;
-          end;
+            // statement depth 0. For declaration groups (type sections) the
+            // first token of the next branch must also be an identifier (a
+            // declaration name), not a section keyword (const/var/type) which
+            // would belong to the enclosing scope; statement branches may
+            // start with any token (keywords like 'end', 'if', ...).
+            if (i = 0) or (LParenDepth <> 0) or (LStmtDepth <> 0) or
+               (Peek(i - 1).Kind <> tkSymbol) or
+               (Peek(i - 1).Text <> ';') or
+               (ADeclGroup and (LKind <> cdEndIf) and
+                (Peek(i).Kind <> tkIdentifier)) then
+              Exit(False);
+            if LKind = cdEndIf then
+            begin
+              Result := True;
+              Exit;
+            end;
+            // { $ELSE}/{$ELSEIF}: keep scanning; a section keyword inside a
+            // later branch (e.g. {$ELSE} ... const ... {$ENDIF}) invalidates
+            // the whole group.
+          end
+          else if (LKind = cdStart) and (i > 0) then
+            // A nested conditional opening inside the scanned range (before
+            // this group's own {$ENDIF}) means a branch contains another
+            // conditional group: the flat model cannot represent it, so fall
+            // back to normal parsing.
+            Exit(False);
         end;
     if LTok.Kind = tkKeyword then
     begin
@@ -564,6 +617,17 @@ begin
         Inc(LParenDepth)
       else if LTok.Text = ')' then
         Dec(LParenDepth);
+    // A section keyword directly after a ';' at depth 0 means the conditional
+    // encloses more than a bare declaration (e.g. a type followed by a const
+    // section): do not treat it as a declaration group.
+    if (LParenDepth = 0) and (LStmtDepth = 0) and (LTok.Kind = tkKeyword) and
+       (i > 0) and (Peek(i - 1).Kind = tkSymbol) and
+       (Peek(i - 1).Text = ';') and
+       ((LTok.Text = 'const') or (LTok.Text = 'var') or
+        (LTok.Text = 'type') or (LTok.Text = 'end') or
+        (LTok.Text = 'begin') or (LTok.Text = 'implementation') or
+        (LTok.Text = 'initialization') or (LTok.Text = 'finalization')) then
+      Exit(False);
     Inc(i);
   end;
 end;
@@ -645,7 +709,7 @@ begin
       Continue;
     end;
     LCond.Free;
-    if (LDir = cdStart) and CanStartConditionalGroup then
+    if (LDir = cdStart) and CanStartConditionalGroup(False) then
       LStatement := ParseConditionalStatementGroup // nested group
     else if LDir = cdStart then
       LStatement := ParseStatement // conditional inside a single statement
@@ -658,6 +722,75 @@ begin
       Advance;
     if (FPos = LPrevPos) and (LStatement = nil) and (not IsSymbol(';')) then
       Advance; // resynchronise on an unexpected terminator/block keyword
+  end;
+  Result := LGroup;
+end;
+
+function TDLDelphiParser.ParseConditionalTypeGroup: TDLConditionalGroup;
+var
+  LGroup: TDLConditionalGroup;
+  LBranch: TDLConditionalDeclBranch;
+  LDir: TDLConditionDirectiveKind;
+  LCond: TDLCondition;
+  LSkipCheck: Boolean;
+  LPrevPos: Integer;
+  LFoundEndIf: Boolean;
+  j: Integer;
+begin
+  // Current token carries a conditional-start directive; the following type
+  // declarations form a conditional group with one branch per path.
+  LGroup := TDLConditionalGroup.Create(GetSpan);
+  LCond := nil;
+  LastConditionalDirective(LCond);
+  LBranch := TDLConditionalDeclBranch.Create(GetSpan, LCond);
+  LGroup.Branches.Add(LBranch);
+  LSkipCheck := True; // the opening directive belongs to this group
+  while True do
+  begin
+    if GetKind = tkEOF then
+    begin
+      Error('Unterminated conditional type group');
+      Break;
+    end;
+    // Process every conditional directive on the current token in source
+    // order (outermost first). A token may carry several directives at once
+    // (e.g. {$ELSE}{$MESSAGE}{$ENDIF} or {$ENDIF}{$IFDEF ...}); the group
+    // must not stop after the first one or it will miss its own {$ENDIF}.
+    LFoundEndIf := False;
+    if not LSkipCheck then
+      for j := 0 to GetCur.LeadingTrivia.Count - 1 do
+        if GetCur.LeadingTrivia[j].Kind = trDirective then
+        begin
+          LCond := nil;
+          LDir := ClassifyDirective(GetCur.LeadingTrivia[j].Text, LCond);
+          if LDir = cdEndIf then
+          begin
+            LCond.Free;
+            LFoundEndIf := True;
+            Break;
+          end;
+          if (LDir = cdElseIf) or (LDir = cdElse) then
+          begin
+            LBranch := TDLConditionalDeclBranch.Create(GetSpan, LCond);
+            LGroup.Branches.Add(LBranch);
+          end
+          else
+            LCond.Free;
+        end;
+    LSkipCheck := False;
+    if LFoundEndIf then
+      Break;
+    if (GetKind = tkIdentifier) or IsSoftNameKeyword then
+    begin
+      LPrevPos := FPos;
+      LBranch.Items.Add(ParseTypeDecl);
+      if FPos = LPrevPos then
+        Advance; // resynchronise
+    end
+    else if IsSymbol(';') then
+      Advance
+    else
+      Advance; // resynchronise on an unexpected token
   end;
   Result := LGroup;
 end;
@@ -1165,9 +1298,11 @@ begin
     end;
     if (GetKind = tkIdentifier) or IsSoftNameKeyword then
     begin
-      // A conditional branch of the type section may hold consts:
-      //   type ...; {$IF X} C = SizeOf(T) div 4; {$ENDIF}
-      if LSawConditional and IsSymbolAhead('=', 1) and
+      // A clean conditional group: {$IFDEF X} A = ...; {$ELSE} B = ...; {$ENDIF}
+      if HasConditionalStartTrivia and CanStartConditionalGroup(True) and
+         SingleConditionalInTrivia then
+        LSection.Items.Add(ParseConditionalTypeGroup)
+      else if LSawConditional and IsSymbolAhead('=', 1) and
          not ((Peek(2).Kind = tkInteger) and
               (Peek(3).Kind = tkSymbol) and (Peek(3).Text = '..')) and
          ((Peek(2).Kind in [tkInteger, tkString, tkFloat, tkCharCode]) or
@@ -3257,7 +3392,7 @@ begin
       FDirectiveStmt := True;
     LCond := nil;
     if (LastConditionalDirective(LCond) = cdStart) and
-       CanStartConditionalGroup and SingleConditionalInTrivia then
+       CanStartConditionalGroup(False) and SingleConditionalInTrivia then
       begin
         LCond.Free;
         LStatement := ParseConditionalStatementGroup;
@@ -4379,6 +4514,7 @@ begin
   FStmtDepth := 0;
   FSuppressCount := 0;
   FConditionalDepth := 0;
+  FDirectiveStmt := False;
   FCurrentVisibility := vsPublished;
   FCurrentStrict := False;
 end;

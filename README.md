@@ -22,7 +22,7 @@ The project consists of a library (`src/`) plus two console applications:
 | `src/DX.Delphi.AstBuilder.pas` | CST → AST lowering pass |
 | `DLDemo.dpr` | Console demo: dumps tokens, CST, AST, symbols, diagnostics |
 | `samples/Demo.pas` | Sample exercising the covered language surface |
-| `tests/` | DUnitX test project (168 tests, incl. real-world fixtures) |
+| `tests/` | DUnitX test project (187 tests, incl. real-world fixtures) |
 | `libs/DUnitX` | DUnitX test framework (Git submodule, test-only) |
 | `libs/spring4d` | Spring4D sources — **test fixture only, NOT a dependency** |
 
@@ -225,8 +225,16 @@ quote-run rules), `#` char codes (decimal/hex/binary), integers
 ## Design decisions & limitations
 
 - **Compiler directives are trivia, not evaluated.** Conditional compilation
-  (`{$IFDEF}` etc.) is not performed; all branches are parsed and kept as
-  trivia attached to CST nodes.
+  (`{$IFDEF}` etc.) is not performed at parse time; instead, *clean*
+  statement-level and declaration-level conditional blocks
+  (`{$IFDEF} … {$ELSEIF} … {$ELSE} … {$ENDIF}`) are represented as
+  structural `TDLConditionalStmt` / `TDLConditionalGroup` nodes with one
+  branch per path, so a code formatter can reformat every conditional path.
+  A define configuration selects the active path via `TDLTreeProjector`
+  (O(branches), no re-parse). Nested conditionals, conditionals inside a
+  single statement/declaration (shared-`end` constructs), and section
+  keywords inside a branch fall back to normal parsing and are kept as
+  trivia.
 - **`T(x)` casts parse as ordinary calls** (they are syntactically identical);
   `Default(T)`, `SizeOf` etc. also parse as ordinary calls.
 - **Tolerant parsing**: unknown or malformed constructs produce diagnostics
@@ -274,7 +282,7 @@ Current status (tracked by the fixtures):
 | Corpus | Files | Result |
 |---|---|---|
 | Spring4D | 180 | parse without crashes; 1 062 diagnostics to reduce |
-| Delphi 13.1 RTL | 584 | 6 known crash files; 923 diagnostics to reduce |
+| Delphi 13.1 RTL | 584 | 6 known crash files; 822 diagnostics to reduce |
 
 The fixtures assert that **no file crashes or hangs the parser** (a handful
 of files with known deep-desync recursion issues are explicitly listed as

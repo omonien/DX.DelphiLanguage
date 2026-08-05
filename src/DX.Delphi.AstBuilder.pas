@@ -58,6 +58,9 @@ type
       ADeclarations: TList<DX.Delphi.AST.TDLDeclaration>);
     function BuildTypeDecl(ACSTDecl: DX.Delphi.CST.TDLTypeDecl):
       DX.Delphi.AST.TDLTypeDecl;
+    function BuildDeclConditionalGroup(
+      ACSTGroup: DX.Delphi.CST.TDLConditionalGroup):
+      DX.Delphi.AST.TDLConditionalDeclGroup;
   public
     constructor Create(ADiagnostics: TDLDiagnostics);
     destructor Destroy; override;
@@ -954,6 +957,12 @@ procedure TDLDelphiAstBuilder.BuildSectionDeclarations(
 var
   LTypeSection: DX.Delphi.CST.TDLTypeSection;
   LTypeDecl: DX.Delphi.CST.TDLTypeDecl;
+  LTypeItem: DX.Delphi.CST.TDLNode;
+  LCondGroup: DX.Delphi.CST.TDLConditionalGroup;
+  LCondDeclBranch: DX.Delphi.CST.TDLConditionalDeclBranch;
+  LTypeBranchItem: DX.Delphi.CST.TDLNode;
+  LAstCondGroup: DX.Delphi.AST.TDLConditionalDeclGroup;
+  LAstCondDeclBranch: DX.Delphi.AST.TDLConditionalDeclBranch;
   LConstSection: DX.Delphi.CST.TDLConstSection;
   LConstDecl: DX.Delphi.CST.TDLConstDecl;
   LVarSection: DX.Delphi.CST.TDLVarSection;
@@ -968,12 +977,19 @@ begin
   if ASection is DX.Delphi.CST.TDLTypeSection then
   begin
     LTypeSection := DX.Delphi.CST.TDLTypeSection(ASection);
-    for LTypeDecl in LTypeSection.Items do
-    begin
-      ADeclarations.Add(BuildTypeDecl(LTypeDecl));
-      FSymbols.Add(TDLSymbol.Create(LTypeDecl.Name.Name, skType,
-        LTypeDecl.Name.Span));
-    end;
+    for LTypeItem in LTypeSection.Items do
+      if LTypeItem is DX.Delphi.CST.TDLTypeDecl then
+      begin
+        LTypeDecl := DX.Delphi.CST.TDLTypeDecl(LTypeItem);
+        ADeclarations.Add(BuildTypeDecl(LTypeDecl));
+        FSymbols.Add(TDLSymbol.Create(LTypeDecl.Name.Name, skType,
+          LTypeDecl.Name.Span));
+      end
+      else if LTypeItem is DX.Delphi.CST.TDLConditionalGroup then
+      begin
+        ADeclarations.Add(BuildDeclConditionalGroup(
+          DX.Delphi.CST.TDLConditionalGroup(LTypeItem)));
+      end;
   end
   else if ASection is DX.Delphi.CST.TDLConstSection then
   begin
@@ -1048,6 +1064,26 @@ begin
     ACSTDecl.Name.Name, LDef);
 end;
 
+function TDLDelphiAstBuilder.BuildDeclConditionalGroup(
+  ACSTGroup: DX.Delphi.CST.TDLConditionalGroup):
+  DX.Delphi.AST.TDLConditionalDeclGroup;
+var
+  LBranch: DX.Delphi.CST.TDLConditionalDeclBranch;
+  LAstBranch: DX.Delphi.AST.TDLConditionalDeclBranch;
+  LItem: DX.Delphi.CST.TDLNode;
+begin
+  Result := DX.Delphi.AST.TDLConditionalDeclGroup.Create(ACSTGroup.Span);
+  for LBranch in ACSTGroup.Branches do
+  begin
+    LAstBranch := DX.Delphi.AST.TDLConditionalDeclBranch.Create(
+      LBranch.Span, LBranch.Condition.Clone);
+    Result.Branches.Add(LAstBranch);
+    for LItem in LBranch.Items do
+      if LItem is DX.Delphi.CST.TDLTypeDecl then
+        LAstBranch.Items.Add(BuildTypeDecl(DX.Delphi.CST.TDLTypeDecl(LItem)));
+  end;
+end;
+
 function TDLDelphiAstBuilder.Build(ACST: DX.Delphi.CST.TDLCompilationUnit): DX.Delphi.AST.TDLModule;
 var
   LModule: DX.Delphi.AST.TDLModule;
@@ -1057,6 +1093,7 @@ var
   LItem: DX.Delphi.CST.TDLNode;
   LTypeSection: DX.Delphi.CST.TDLTypeSection;
   LTypeDecl: DX.Delphi.CST.TDLTypeDecl;
+  LTypeItem: DX.Delphi.CST.TDLNode;
   LConstSection: DX.Delphi.CST.TDLConstSection;
   LConstDecl: DX.Delphi.CST.TDLConstDecl;
   LResStringSection: DX.Delphi.CST.TDLResStringSection;
@@ -1103,12 +1140,17 @@ begin
     if LItem is DX.Delphi.CST.TDLTypeSection then
     begin
       LTypeSection := DX.Delphi.CST.TDLTypeSection(LItem);
-      for LTypeDecl in LTypeSection.Items do
-      begin
-        LModule.Declarations.Add(BuildTypeDecl(LTypeDecl));
-        FSymbols.Add(TDLSymbol.Create(LTypeDecl.Name.Name, skType,
-          LTypeDecl.Name.Span));
-      end;
+      for LTypeItem in LTypeSection.Items do
+        if LTypeItem is DX.Delphi.CST.TDLTypeDecl then
+        begin
+          LTypeDecl := DX.Delphi.CST.TDLTypeDecl(LTypeItem);
+          LModule.Declarations.Add(BuildTypeDecl(LTypeDecl));
+          FSymbols.Add(TDLSymbol.Create(LTypeDecl.Name.Name, skType,
+            LTypeDecl.Name.Span));
+        end
+        else if LTypeItem is DX.Delphi.CST.TDLConditionalGroup then
+          LModule.Declarations.Add(BuildDeclConditionalGroup(
+            DX.Delphi.CST.TDLConditionalGroup(LTypeItem)));
     end
     else if LItem is DX.Delphi.CST.TDLConstSection then
     begin

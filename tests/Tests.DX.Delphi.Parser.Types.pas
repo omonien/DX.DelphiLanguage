@@ -91,7 +91,7 @@ begin
     try
       Assert.AreEqual(0, LDiagnostics.Count);
       LClass := TDLClassType(
-        TDLTypeSection(LUnit.Items[0]).Items[0].TypeExpr);
+        TDLTypeDecl(TDLTypeSection(LUnit.Items[0]).Items[0]).TypeExpr);
       Assert.IsTrue(LClass.IsInterface);
       Assert.AreEqual(1, LClass.Members.Count);
     finally
@@ -119,7 +119,7 @@ begin
     try
       Assert.AreEqual(0, LDiagnostics.Count);
       LClass := TDLClassType(
-        TDLTypeSection(LUnit.Items[0]).Items[0].TypeExpr);
+        TDLTypeDecl(TDLTypeSection(LUnit.Items[0]).Items[0]).TypeExpr);
       Assert.IsTrue(LClass.IsInterface);
       Assert.IsTrue(LClass.IsDispInterface);
     finally
@@ -147,7 +147,7 @@ begin
     try
       Assert.AreEqual(0, LDiagnostics.Count);
       LClass := TDLClassType(
-        TDLTypeSection(LUnit.Items[0]).Items[0].TypeExpr);
+        TDLTypeDecl(TDLTypeSection(LUnit.Items[0]).Items[0]).TypeExpr);
       Assert.IsTrue(LClass.IsObject);
       Assert.AreEqual(2, LClass.Members.Count);
     finally
@@ -176,10 +176,10 @@ begin
     try
       Assert.AreEqual(0, LDiagnostics.Count);
       LClass := TDLClassType(
-        TDLTypeSection(LUnit.Items[0]).Items[0].TypeExpr);
+        TDLTypeDecl(TDLTypeSection(LUnit.Items[0]).Items[0]).TypeExpr);
       Assert.IsTrue(LClass.IsSealed);
       LClass := TDLClassType(
-        TDLTypeSection(LUnit.Items[0]).Items[1].TypeExpr);
+        TDLTypeDecl(TDLTypeSection(LUnit.Items[0]).Items[1]).TypeExpr);
       Assert.IsTrue(LClass.IsAbstract);
     finally
       LUnit.Free;
@@ -204,7 +204,7 @@ begin
     try
       Assert.AreEqual(0, LDiagnostics.Count);
       LClass := TDLClassType(
-        TDLTypeSection(LUnit.Items[0]).Items[0].TypeExpr);
+        TDLTypeDecl(TDLTypeSection(LUnit.Items[0]).Items[0]).TypeExpr);
       Assert.IsTrue(LClass.IsClassRef);
       Assert.IsNotNull(LClass.BaseType);
     finally
@@ -236,7 +236,7 @@ begin
       // class var sections are parsed and skipped; the method must survive
       Assert.AreEqual(0, LDiagnostics.Count);
       LClass := TDLClassType(
-        TDLTypeSection(LUnit.Items[0]).Items[0].TypeExpr);
+        TDLTypeDecl(TDLTypeSection(LUnit.Items[0]).Items[0]).TypeExpr);
       LFoundMethod := False;
       for LMember in LClass.Members do
         if LMember is TDLMethodDecl then
@@ -272,7 +272,7 @@ begin
     try
       Assert.AreEqual(0, LDiagnostics.Count);
       LClass := TDLClassType(
-        TDLTypeSection(LUnit.Items[0]).Items[0].TypeExpr);
+        TDLTypeDecl(TDLTypeSection(LUnit.Items[0]).Items[0]).TypeExpr);
       LFoundMethod := False;
       for LMember in LClass.Members do
         if LMember is TDLMethodDecl then
@@ -304,7 +304,7 @@ begin
     try
       Assert.AreEqual(0, LDiagnostics.Count);
       LClass := TDLClassType(
-        TDLTypeSection(LUnit.Items[0]).Items[0].TypeExpr);
+        TDLTypeDecl(TDLTypeSection(LUnit.Items[0]).Items[0]).TypeExpr);
       Assert.AreEqual(1, LClass.Members.Count);
     finally
       LUnit.Free;
@@ -329,7 +329,7 @@ begin
     try
       Assert.AreEqual(0, LDiagnostics.Count);
       LNamed := TDLNamedType(
-        TDLTypeSection(LUnit.Items[0]).Items[0].TypeExpr);
+        TDLTypeDecl(TDLTypeSection(LUnit.Items[0]).Items[0]).TypeExpr);
       Assert.AreEqual(1, LNamed.TypeArgs.Count);
       Assert.IsTrue(LNamed.TypeArgs[0].TypeExpr is TDLNamedType);
       Assert.AreEqual(2, TDLNamedType(
@@ -384,7 +384,7 @@ begin
     try
       Assert.AreEqual(0, LDiagnostics.Count);
       LEnum := TDLEnumType(
-        TDLTypeSection(LUnit.Items[0]).Items[0].TypeExpr);
+        TDLTypeDecl(TDLTypeSection(LUnit.Items[0]).Items[0]).TypeExpr);
       Assert.AreEqual(3, LEnum.Members.Count);
       Assert.IsNotNull(LEnum.Members[0].Value);
     finally
@@ -410,7 +410,7 @@ begin
     try
       Assert.AreEqual(0, LDiagnostics.Count);
       LSubrange := TDLSubrangeType(
-        TDLTypeSection(LUnit.Items[0]).Items[0].TypeExpr);
+        TDLTypeDecl(TDLTypeSection(LUnit.Items[0]).Items[0]).TypeExpr);
       Assert.IsNotNull(LSubrange.Low);
       Assert.IsNotNull(LSubrange.High);
     finally
@@ -436,7 +436,7 @@ begin
     try
       Assert.AreEqual(0, LDiagnostics.Count);
       LSet := TDLSetType(
-        TDLTypeSection(LUnit.Items[0]).Items[0].TypeExpr);
+        TDLTypeDecl(TDLTypeSection(LUnit.Items[0]).Items[0]).TypeExpr);
       Assert.IsNotNull(LSet.BaseType);
     finally
       LUnit.Free;
@@ -461,11 +461,11 @@ begin
       'implementation'#13#10'end.', LDiagnostics);
     try
       Assert.AreEqual(0, LDiagnostics.Count);
-      Assert.IsTrue(TDLTypeSection(LUnit.Items[0]).Items[0].TypeExpr
+      Assert.IsTrue(TDLTypeDecl(TDLTypeSection(LUnit.Items[0]).Items[0]).TypeExpr
         is TDLPointerType);
-      Assert.IsTrue(TDLTypeSection(LUnit.Items[0]).Items[1].TypeExpr
+      Assert.IsTrue(TDLTypeDecl(TDLTypeSection(LUnit.Items[0]).Items[1]).TypeExpr
         is TDLFileType);
-      Assert.IsTrue(TDLTypeSection(LUnit.Items[0]).Items[2].TypeExpr
+      Assert.IsTrue(TDLTypeDecl(TDLTypeSection(LUnit.Items[0]).Items[2]).TypeExpr
         is TDLFileType);
     finally
       LUnit.Free;
@@ -490,7 +490,7 @@ begin
     try
       Assert.AreEqual(0, LDiagnostics.Count);
       LStringType := TDLStringType(
-        TDLTypeSection(LUnit.Items[0]).Items[0].TypeExpr);
+        TDLTypeDecl(TDLTypeSection(LUnit.Items[0]).Items[0]).TypeExpr);
       Assert.IsNotNull(LStringType.Length);
     finally
       LUnit.Free;
