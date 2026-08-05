@@ -1,4 +1,4 @@
-# DX.DelphiLanguage
+﻿# DX.DelphiLanguage
 
 A **language model for Delphi written in Delphi**, targeting the language surface
 of **Delphi 13.1 (Florence)**. It provides a full-fidelity **concrete syntax
