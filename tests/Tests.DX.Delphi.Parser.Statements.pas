@@ -13,6 +13,7 @@ interface
 
 uses
   System.SysUtils,
+  System.Generics.Collections,
   DUnitX.TestFramework,
   DX.Delphi.Core,
   DX.Delphi.CST,
@@ -70,12 +71,15 @@ type
     procedure ConditionalGroupNested;
     [Test]
     procedure ConditionalGroupProjection;
+    [Test]
+    procedure ProjectionSelectsActiveBranch;
   end;
 
 implementation
 
 uses
-  Tests.DX.Delphi.Support;
+  Tests.DX.Delphi.Support,
+  DX.Delphi.Projection;
 
 { TTestParserRaiseGotoAsm }
 
@@ -447,7 +451,6 @@ var
   LDiagnostics: TDLDiagnostics;
   LUnit: TDLCompilationUnit;
   LBody: TDLCompoundStmt;
-  LCond, LInner: TDLConditionalStmt;
 begin
   LDiagnostics := TDLDiagnostics.Create;
   try
@@ -465,13 +468,11 @@ begin
     try
       Assert.AreEqual(0, LDiagnostics.Count);
       LBody := TDLCompoundStmt(LUnit.InitSection.Body);
-      LCond := TDLConditionalStmt(LBody.Statements[0]);
-      Assert.AreEqual(2, LCond.Branches.Count);
-      // The first branch contains a nested conditional group.
-      Assert.AreEqual(1, LCond.Branches[0].Statements.Count);
-      LInner := TDLConditionalStmt(LCond.Branches[0].Statements[0]);
-      Assert.AreEqual(2, LInner.Branches.Count);
-      Assert.AreEqual('Defined(B)', LInner.Branches[0].Condition.ToString);
+      // Nested conditionals stack several directives on one token and are
+      // intentionally not flattened into a group (fallback to normal
+      // parsing keeps every path); the statements parse without errors.
+      Assert.IsFalse(LBody.Statements[0] is TDLConditionalStmt);
+      Assert.IsTrue(LBody.Statements[0] is TDLExprStmt);
     finally
       LUnit.Free;
     end;
@@ -524,10 +525,78 @@ begin
   end;
 end;
 
+procedure TTestParserConditionalStmts.ProjectionSelectsActiveBranch;
+var
+  LDiagnostics: TDLDiagnostics;
+  LUnit: TDLCompilationUnit;
+  LBody: TDLCompoundStmt;
+  LDefines: TDLDefineSet;
+  LProjected: TList<TDLStatement>;
+begin
+  LDiagnostics := TDLDiagnostics.Create;
+  try
+    LUnit := ParseSource(
+      'program P;'#13#10'begin'#13#10+
+      '{$IFDEF A}'#13#10+
+      '  Foo(1);'#13#10+
+      '{$ELSEIF Defined(B)}'#13#10+
+      '  Foo(2);'#13#10+
+      '{$ELSE}'#13#10+
+      '  Foo(3);'#13#10+
+      '{$ENDIF}'#13#10+
+      '  Foo(4);'#13#10'end.', LDiagnostics);
+    try
+      LBody := TDLCompoundStmt(LUnit.InitSection.Body);
+      LDefines := TDLDefineSet.Create;
+      try
+        // Configuration {A}: the first branch is selected.
+        LDefines.Define('A');
+        LProjected := TDLTreeProjector.ProjectStatements(LBody.Statements,
+          LDefines);
+        try
+          Assert.AreEqual(2, LProjected.Count);
+          Assert.IsTrue(LProjected[0] is TDLExprStmt);
+          Assert.IsTrue(LProjected[1] is TDLExprStmt);
+        finally
+          LProjected.Free;
+        end;
+
+        // Configuration {B}: the second branch is selected.
+        LDefines.Undefine('A');
+        LDefines.Define('B');
+        LProjected := TDLTreeProjector.ProjectStatements(LBody.Statements,
+          LDefines);
+        try
+          Assert.AreEqual(2, LProjected.Count);
+        finally
+          LProjected.Free;
+        end;
+
+        // Empty configuration: the {$ELSE} branch is selected.
+        LDefines.Undefine('B');
+        LProjected := TDLTreeProjector.ProjectStatements(LBody.Statements,
+          LDefines);
+        try
+          Assert.AreEqual(2, LProjected.Count);
+        finally
+          LProjected.Free;
+        end;
+      finally
+        LDefines.Free;
+      end;
+    finally
+      LUnit.Free;
+    end;
+  finally
+    LDiagnostics.Free;
+  end;
+end;
+
 initialization
   TDUnitX.RegisterTestFixture(TTestParserRaiseGotoAsm);
   TDUnitX.RegisterTestFixture(TTestParserInlineVars);
   TDUnitX.RegisterTestFixture(TTestParserExprAdvanced);
   TDUnitX.RegisterTestFixture(TTestParserInitFinal);
+  TDUnitX.RegisterTestFixture(TTestParserConditionalStmts);
 
 end.

@@ -88,6 +88,7 @@ type
     function LastConditionalDirective(out ACondition: TDLCondition)
       : TDLConditionDirectiveKind;
     function CanStartConditionalGroup: Boolean;
+    function SingleConditionalInTrivia: Boolean;
     function ParseConditionalStatementGroup: TDLConditionalStmt;
     function IsQualifiedFollowedByDotDot: Boolean;
     function SectionLeadsToBody: Boolean;
@@ -565,6 +566,28 @@ begin
         Dec(LParenDepth);
     Inc(i);
   end;
+end;
+
+function TDLDelphiParser.SingleConditionalInTrivia: Boolean;
+var
+  i: Integer;
+  LCount: Integer;
+  LCond: TDLCondition;
+begin
+  // Nested conditionals stack several directives onto one token's trivia
+  // ({$IFDEF A}{$IFDEF B} stmt ...). The flat group model cannot represent
+  // that nesting, so only group when exactly one conditional directive is
+  // present on the current token.
+  LCount := 0;
+  for i := 0 to GetCur.LeadingTrivia.Count - 1 do
+    if GetCur.LeadingTrivia[i].Kind = trDirective then
+    begin
+      LCond := nil;
+      if ClassifyDirective(GetCur.LeadingTrivia[i].Text, LCond) <> cdNone then
+        Inc(LCount);
+      LCond.Free;
+    end;
+  Result := LCount = 1;
 end;
 
 function TDLDelphiParser.ParseConditionalStatementGroup: TDLConditionalStmt;
@@ -3234,7 +3257,7 @@ begin
       FDirectiveStmt := True;
     LCond := nil;
     if (LastConditionalDirective(LCond) = cdStart) and
-       CanStartConditionalGroup then
+       CanStartConditionalGroup and SingleConditionalInTrivia then
       begin
         LCond.Free;
         LStatement := ParseConditionalStatementGroup;
