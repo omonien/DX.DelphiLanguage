@@ -273,8 +273,8 @@ Current status (tracked by the fixtures):
 
 | Corpus | Files | Result |
 |---|---|---|
-| Spring4D | 180 | parse without crashes; 27 130 diagnostics to reduce |
-| Delphi 13.1 RTL | 584 | 6 known crash files; 12 894 diagnostics to reduce |
+| Spring4D | 180 | parse without crashes; 1 070 diagnostics to reduce |
+| Delphi 13.1 RTL | 584 | 3-6 known crash files; 2 841 diagnostics to reduce |
 
 The fixtures assert that **no file crashes or hangs the parser** (a handful
 of files with known deep-desync recursion issues are explicitly listed as

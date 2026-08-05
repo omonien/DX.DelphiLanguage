@@ -267,9 +267,9 @@ begin
     IsKeyword(kwCdecl) or IsKeyword(kwStdcall) or IsKeyword(kwSafecall) or
     IsKeyword(kwPlatform) or IsKeyword(kwExperimental) or IsKeyword(kwUnsafe) or
     IsKeyword(kwVarargs) or IsKeyword(kwNear) or IsKeyword(kwFar) or
-    IsKeyword(kwAbsolute) or IsKeyword(kwAutomated) or IsKeyword(kwDispInterface) or
+    IsKeyword(kwAutomated) or IsKeyword(kwDispInterface) or
     IsKeyword(kwContains) or IsKeyword(kwRequires) or IsKeyword(kwPackage) or
-    IsKeyword(kwFile) or IsKeyword(kwLabel) or IsKeyword(kwString) or
+    IsKeyword(kwString) or
     IsKeyword(kwNoReturn) or IsKeyword(kwReference);
 end;
 
@@ -943,20 +943,49 @@ function TDLDelphiParser.ParseTypeSection: TDLTypeSection;
 var
   LSection: TDLTypeSection;
   LPrevPos: Integer;
+  LSawConditional: Boolean;
 begin
+  LSawConditional := False;
   LSection := TDLTypeSection.Create(GetSpan, False);
   TakeLeadingTrivia(LSection);
   ExpectKeyword(kwType);
   while GetKind <> tkEOF do
   begin
-    LPrevPos := FPos;
+    LPrevPos := FPos;    if HasConditionalStartTrivia then
+      LSawConditional := True;
     if IsSymbol('[') then
     begin
       // attributes on the declaration
       ParseAttributes.Free;
     end;
-    if GetKind = tkIdentifier then
-      LSection.Items.Add(ParseTypeDecl)
+    if (GetKind = tkIdentifier) or IsSoftNameKeyword then
+    begin
+      // A conditional branch of the type section may hold consts:
+      //   type ...; {$IF X} C = SizeOf(T) div 4; {$ENDIF}
+      if LSawConditional and IsSymbolAhead('=', 1) and
+         ((Peek(2).Kind in [tkInteger, tkString, tkFloat, tkCharCode]) or
+          ((Peek(2).Kind = tkIdentifier) and (Peek(3).Kind = tkSymbol) and
+           (Peek(3).Text = '(')) or
+          ((Peek(2).Kind = tkKeyword) and (Peek(2).Text = 'nil'))) then
+        ParseConstDecl.Free // a const in a conditional branch of a type section
+      else
+        LSection.Items.Add(ParseTypeDecl);
+    end
+    else if LSawConditional and
+            (IsKeyword(kwConst) or IsKeyword(kwVar) or IsKeyword(kwType) or
+             IsKeyword(kwLabel)) then
+    begin
+      // Conditional branches may contain other section kinds:
+      //   type A = ...; {$IF X} const ... {$ELSEIF Y} type B = ...; {$ENDIF}
+      case GetKeyword of
+        kwConst: ParseConstSection.Free;
+        kwVar: ParseVarSection(False).Free;
+        kwType:
+          Advance; // a nested 'type' keyword continues this section
+      else
+        ParseLabelSection.Free;
+      end;
+    end
     else
       Break;
     if FPos = LPrevPos then
@@ -1046,10 +1075,13 @@ begin
       Advance
     else if IsSymbol(':') then
     begin
-      // constraint list; skip until , or >
+      // constraint list (T: A, constructor); stop at a new parameter
       Advance;
-      while (GetKind <> tkEOF) and (not IsSymbol(',')) and (not IsSymbol('>')) do
-        Advance;
+      while (GetKind <> tkEOF) and (not IsSymbol('>')) do
+        if IsIdentifier and IsSymbolAhead(':', 1) then
+          Break // a new type parameter name begins (U: B)
+        else
+          Advance;
     end
     else
       Break;
@@ -1069,6 +1101,14 @@ begin
   while GetKind <> tkEOF do
   begin
     LPrevPos := FPos;
+    // An alternate conditional branch may contain a type declaration
+    // instead of a const:  const X = 1; {$ELSEIF Y} type T = record ...;
+    if (IsIdentifier or IsSoftNameKeyword) and HasConditionalStartTrivia and
+       IsSymbolAhead('=', 1) and (Peek(2).Kind = tkKeyword) and
+       ((Peek(2).Text = 'record') or (Peek(2).Text = 'class') or
+        (Peek(2).Text = 'interface') or (Peek(2).Text = 'dispinterface') or
+        (Peek(2).Text = 'object')) then
+      Break;
     if (GetKind = tkIdentifier) or IsSoftNameKeyword then
       LSection.Items.Add(ParseConstDecl)
     else
@@ -1083,9 +1123,15 @@ begin
     begin
       if (IsIdentifier or IsSoftNameKeyword) and
          (IsSymbolAhead('=', 1) or IsSymbolAhead(':', 1)) then
-        // Alternate const declaration in a conditional branch:
-        //   X = 1; {$ELSE} X = 2; {$ENDIF}
-        ParseConstDecl.Free
+        if (Peek(2).Kind = tkKeyword) and
+           ((Peek(2).Text = 'record') or (Peek(2).Text = 'class') or
+            (Peek(2).Text = 'interface') or (Peek(2).Text = 'dispinterface') or
+            (Peek(2).Text = 'object')) then
+          Break // the alternate branch contains a type, not a const
+        else
+          // Alternate const declaration in a conditional branch:
+          //   X = 1; {$ELSE} X = 2; {$ENDIF}
+          ParseConstDecl.Free
       else
       begin
         ParseExpression.Free;
@@ -1307,8 +1353,7 @@ var
 begin
   LSection := TDLLabelSection.Create(GetSpan);
   TakeLeadingTrivia(LSection);
-  ExpectKeyword(kwLabel);
-  while GetKind <> tkEOF do
+  ExpectKeyword(kwLabel);  while GetKind <> tkEOF do
   begin
     if (GetKind = tkIdentifier) or (GetKind = tkInteger) then
     begin
@@ -1850,6 +1895,28 @@ begin
       Advance;
     if IsSymbol(';') then
       Advance; // branch separator
+    // Alternate conditional field lists of the same branch:
+    //   3: (A: X); {$ELSE} (B: Y); {$ENDIF}
+    while IsSymbol('(') and HasConditionalStartTrivia do
+    begin
+      Advance;
+      while (GetKind <> tkEOF) and (not IsSymbol(')')) and
+            (not IsKeyword(kwEnd)) do
+      begin
+        if IsIdentifier then
+        begin
+          ParseFieldDeclBody.Free;
+          if IsSymbol(';') then
+            Advance;
+        end
+        else
+          Advance;
+      end;
+      if IsSymbol(')') then
+        Advance;
+      if IsSymbol(';') then
+        Advance;
+    end;
   end;
   Result := LSection;
 end;
@@ -2471,6 +2538,16 @@ begin
   end;
   ParseMethodDirectivesAndSemicolons(LHeader.Directives);
   ExpectSemicolon;
+  // Conditional alternates of directive-only (external/forward) declarations:
+  //   procedure X; external A name 'b'; {$ELSE} ; {$L f.obj} {$ENDIF}
+  if LHasForward then
+    while HasConditionalStartTrivia do
+    begin
+      while (GetKind <> tkEOF) and (not IsSymbol(';')) do
+        Advance;
+      if IsSymbol(';') then
+        Advance;
+    end;
   // A forward-declared routine has no body; the following token belongs to
   // the enclosing scope even if it is a section keyword (var/type/...).
   // Externally imported routines (external ...) likewise have no body.
@@ -2848,6 +2925,18 @@ begin
     Advance;
   if IsKeyword(kwWriteOnly) then
     Advance;
+  if IsIdentifier and (LowerCase(GetText) = 'dispid') then
+  begin
+    // dispinterface property:  property X: T readonly dispid N;
+    Advance;
+    if GetKind = tkInteger then
+      Advance;
+    if IsSymbol('-') and (Peek(1).Kind = tkInteger) then
+    begin
+      Advance; // dispid -4
+      Advance;
+    end;
+  end;
   ExpectSemicolon;
   // A default/nodefault directive may also follow the terminating semicolon
   // (default array property marker: "property X: T read F; default;").
