@@ -88,6 +88,8 @@ type
     function HasDirectiveTrivia: Boolean;
     function HasConditionalStartTrivia: Boolean;
     function HasConditionalContinuationTrivia: Boolean;
+    function HasConditionalBranchTrivia: Boolean;
+    procedure SkipConditionalBranchesToEndIf;
     function LastConditionalDirective(out ACondition: TDLCondition)
       : TDLConditionDirectiveKind;
     function FirstConditionalDirective(out ACondition: TDLCondition)
@@ -514,6 +516,90 @@ begin
       else
         LCond.Free;
     end;
+end;
+
+function TDLDelphiParser.HasConditionalBranchTrivia: Boolean;
+var
+  i: Integer;
+  LCond: TDLCondition;
+begin
+  // True when the current token carries a branch directive of an ongoing
+  // conditional chain ({$ELSE}/{$ELSEIF}/{$ENDIF}); used to detect
+  // shared-`end` constructs where a declaration spans a conditional
+  // boundary without a clean `;`-terminated group.
+  Result := False;
+  for i := 0 to GetCur.LeadingTrivia.Count - 1 do
+    if GetCur.LeadingTrivia[i].Kind = trDirective then
+    begin
+      LCond := nil;
+      if ClassifyDirective(GetCur.LeadingTrivia[i].Text, LCond) in
+         [cdElseIf, cdElse, cdEndIf] then
+      begin
+        LCond.Free;
+        Exit(True);
+      end
+      else
+        LCond.Free;
+    end;
+end;
+
+procedure TDLDelphiParser.SkipConditionalBranchesToEndIf;
+var
+  LDepth: Integer;
+  i: Integer;
+  LCond: TDLCondition;
+  LKind: TDLConditionDirectiveKind;
+  LHaveSkip: Boolean;
+  LFirst: Boolean;
+begin
+  // The current token starts or continues an "unmanaged" conditional (one
+  // that was not recognised as a clean group, e.g. a shared-`end` construct
+  // or a conditional-compiled expression). Skip the remaining branches up to
+  // the matching {$ENDIF} so the enclosing statement/declaration resumes
+  // after it. If the token only carries the closing {$ENDIF} of a branch that
+  // was already parsed, there is nothing to skip.
+  LHaveSkip := False;
+  for i := 0 to GetCur.LeadingTrivia.Count - 1 do
+    if GetCur.LeadingTrivia[i].Kind = trDirective then
+    begin
+      LCond := nil;
+      LKind := ClassifyDirective(GetCur.LeadingTrivia[i].Text, LCond);
+      LCond.Free;
+      if LKind in [cdStart, cdElseIf, cdElse] then
+      begin
+        LHaveSkip := True;
+        Break;
+      end;
+    end;
+  if not LHaveSkip then
+    Exit;
+  LDepth := 1;
+  LFirst := True;
+  while GetKind <> tkEOF do
+  begin
+    for i := 0 to GetCur.LeadingTrivia.Count - 1 do
+      if GetCur.LeadingTrivia[i].Kind = trDirective then
+      begin
+        LCond := nil;
+        LKind := ClassifyDirective(GetCur.LeadingTrivia[i].Text, LCond);
+        LCond.Free;
+        if LKind = cdStart then
+        begin
+          // The start directive on the very first token belongs to the
+          // conditional we are skipping (already counted in LDepth := 1).
+          if not LFirst then
+            Inc(LDepth);
+        end
+        else if LKind = cdEndIf then
+        begin
+          Dec(LDepth);
+          if LDepth = 0 then
+            Exit; // current token stays; its {$ENDIF} closes this conditional
+        end;
+      end;
+    LFirst := False;
+    Advance;
+  end;
 end;
 
 function TDLDelphiParser.FirstConditionalDirective(
@@ -1819,6 +1905,13 @@ var
   LAttribute: TDLAttribute;
 begin
   LAttribute := TDLAttribute.Create(GetSpan);
+  // GUID attribute of an interface body: ['{...}']
+  if GetKind = tkString then
+  begin
+    Advance;
+    Result := LAttribute;
+    Exit;
+  end;
   while IsIdentifier or (GetKind = tkKeyword) do
   begin
     LAttribute.NamePath.Add(MakeIdentifier);
@@ -2176,7 +2269,8 @@ begin
     end
     else
       if not ParseMemberSection(LRecord.Members) then
-        Advance;
+        if not IsKeyword(kwEnd) then
+          Advance;
     if FPos = LPrevPos then
       Advance; // resynchronise
   end;
@@ -2215,7 +2309,8 @@ begin
   while (GetKind <> tkEOF) and (not IsKeyword(kwEnd)) do
   begin
     if not ParseMemberSection(LMembers) then
-      Advance;
+      if not IsKeyword(kwEnd) then
+        Advance;
   end;
   ExpectKeyword(kwEnd);
   Result := TDLClassType.Create(LStart, False, False, True, False, False,
@@ -2409,7 +2504,8 @@ begin
     while (GetKind <> tkEOF) and (not IsKeyword(kwEnd)) do
     begin
       if not ParseMemberSection(LMembers) then
-        Advance;
+        if not IsKeyword(kwEnd) then
+          Advance;
     end;
     ExpectKeyword(kwEnd);
     if IsIdentifier and (LowerCase(GetText) = 'align') then
@@ -2647,6 +2743,11 @@ var
 begin
   Result := True;
   LIsStrict := False;
+  // A shared-`end` construct: a class/interface/record member list runs into
+  // a conditional branch marker without a terminating 'end'. Skip the
+  // remaining branches so the declaration resumes after the {$ENDIF}.
+  if HasConditionalBranchTrivia then
+    SkipConditionalBranchesToEndIf;
   if IsKeyword(kwStrict) then
   begin
     LIsStrict := True;
@@ -3532,6 +3633,9 @@ begin
         Advance;
         LTarget := LExpression;
         LExpression := ParseExpression;
+        // Conditional-compiled value:
+        //   X := {$IFDEF A}1{$ELSE}2{$ENDIF};
+        SkipConditionalBranchesToEndIf;
         Result := TDLAssignmentStmt.Create(TDLSourceSpan.Create(LStart.Start,
           GetSpan.Stop), LTarget, LExpression);
       end

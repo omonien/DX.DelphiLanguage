@@ -56,6 +56,8 @@ type
     procedure ConditionalConstGroup;
     [Test]
     procedure ConditionalVarGroup;
+    [Test]
+    procedure SharedEndInterfaceBody;
   end;
 
   [TestFixture]
@@ -577,6 +579,42 @@ begin
       Assert.AreEqual('Y', TDLVarDecl(
         LGroup.Branches[0].Items[0]).Names[0].Name);
       Assert.AreEqual(ckAlways, LGroup.Branches[1].Condition.Kind);
+    finally
+      LUnit.Free;
+    end;
+  finally
+    LDiagnostics.Free;
+  end;
+end;
+
+procedure TTestConditionalConstVarDeclarations.SharedEndInterfaceBody;
+var
+  LDiagnostics: TDLDiagnostics;
+  LUnit: TDLCompilationUnit;
+begin
+  // A shared-`end` construct: the interface base type is selected by a
+  // conditional, but the member list continues after {$ENDIF}.
+  LDiagnostics := TDLDiagnostics.Create;
+  try
+    LUnit := ParseSource(
+      'unit U;'#13#10'interface'#13#10'type'#13#10+
+      '  TBase1 = interface'#13#10'  end;'#13#10+
+      '  TBase2 = interface'#13#10'  end;'#13#10+
+      '{$IFDEF IOS}'#13#10+
+      '  TView = interface(TBase1)'#13#10+
+      '{$ELSE}'#13#10+
+      '  TView = interface(TBase2)'#13#10+
+      '{$ENDIF}'#13#10+
+      '    [''{B1CA7942-7BD4-41C1-A928-4AA9D2229C1A}'']'#13#10+
+      '    procedure Bar;'#13#10+
+      '  end;'#13#10+
+      'implementation'#13#10'end.', LDiagnostics);
+    try
+      Assert.AreEqual(0, LDiagnostics.Count);
+      // One type section holding all interface declarations.
+      Assert.AreEqual(1, LUnit.Items.Count);
+      Assert.IsTrue(LUnit.Items[0] is TDLTypeSection);
+      Assert.AreEqual(3, TDLTypeSection(LUnit.Items[0]).Items.Count);
     finally
       LUnit.Free;
     end;
