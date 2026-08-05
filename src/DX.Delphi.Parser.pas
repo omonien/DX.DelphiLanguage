@@ -2537,17 +2537,15 @@ begin
     LHeader.ReturnType := ParseTypeExpr;
   end;
   ParseMethodDirectivesAndSemicolons(LHeader.Directives);
-  ExpectSemicolon;
-  // Conditional alternates of directive-only (external/forward) declarations:
-  //   procedure X; external A name 'b'; {$ELSE} ; {$L f.obj} {$ENDIF}
-  if LHasForward then
-    while HasConditionalStartTrivia do
-    begin
-      while (GetKind <> tkEOF) and (not IsSymbol(';')) do
-        Advance;
-      if IsSymbol(';') then
-        Advance;
-    end;
+  // A missing ';' between external declarations is tolerated when the next
+  // token starts a new declaration (some RTL files omit it).
+  if IsSymbol(';') then
+    Advance
+  else if not (IsKeyword(kwProcedure) or IsKeyword(kwFunction) or
+               IsKeyword(kwClass) or IsKeyword(kwType) or IsKeyword(kwVar) or
+               IsKeyword(kwConst) or IsKeyword(kwEnd) or
+               IsKeyword(kwInterface)) then
+    ExpectSemicolon;
   // A forward-declared routine has no body; the following token belongs to
   // the enclosing scope even if it is a section keyword (var/type/...).
   // Externally imported routines (external ...) likewise have no body.
@@ -2556,6 +2554,25 @@ begin
     if SameText(LDirective.Name.Name, 'forward') or
        SameText(LDirective.Name.Name, 'external') then
       LHasForward := True;
+  // Conditional alternates of directive-only (external/forward) declarations:
+  //   procedure X; external A name 'b'; {$ELSE} ; {$L f.obj} {$ENDIF}
+  if LHasForward then
+    while HasConditionalStartTrivia do
+    begin
+      // Skip the alternate branch up to its ';', but never across a
+      // declaration boundary (procedure/function/class/...).
+      while (GetKind <> tkEOF) and (not IsSymbol(';')) and
+            not (IsKeyword(kwProcedure) or IsKeyword(kwFunction) or
+                 IsKeyword(kwClass) or IsKeyword(kwType) or
+                 IsKeyword(kwVar) or IsKeyword(kwConst) or
+                 IsKeyword(kwEnd) or IsKeyword(kwImplementation) or
+                 IsKeyword(kwInterface)) do
+        Advance;
+      if IsSymbol(';') then
+        Advance
+      else
+        Break;
+    end;
   if AAllowBody and (not LHasForward) and
      (IsKeyword(kwBegin) or IsKeyword(kwAsm) or
       IsKeyword(kwVar) or IsKeyword(kwLabel) or IsKeyword(kwConst) or
@@ -2747,13 +2764,26 @@ begin
       begin
         LDirective := TDLDirective.Create(GetSpan, MakeIdentifier);
         ADirectives.Add(LDirective);
+        if IsIdentifier and (LowerCase(GetText) = 'framework') then
+        begin
+          // external framework 'Name' name '...'  (iOS)
+          Advance;
+          if GetKind = tkString then
+            LDirective.Values.Add(ParseStringSequence);
+        end;
         if GetKind = tkString then
           LDirective.Values.Add(ParseStringSequence)
-        else if IsIdentifier or IsSoftNameKeyword then
+        else if (IsIdentifier or IsSoftNameKeyword) and
+                (GetKeyword <> kwName) and (GetKeyword <> kwIndex) then
           // external <const-name> [name '...']  (the external library may be
           // a constant, e.g. RTLHelperLibName)
           LDirective.Values.Add(TDLIdentifierExpr.Create(GetSpan,
             MakeIdentifier));
+        // external {$IFDEF A}lib1{$ELSE}lib2{$ENDIF} [name 'x'];
+        while HasConditionalStartTrivia and
+              ((IsIdentifier or IsSoftNameKeyword) and
+               (GetKeyword <> kwName) and (GetKeyword <> kwIndex)) do
+          MakeIdentifier.Free;
         if IsKeyword(kwName) then
         begin
           Advance;
@@ -2765,6 +2795,16 @@ begin
         begin
           Advance;
           LDirective.Values.Add(ParseExpression);
+        end;
+        // More conditional branches may follow the name/index specifier.
+        while HasConditionalStartTrivia and
+              (IsIdentifier or IsSoftNameKeyword) do
+        begin
+          MakeIdentifier.Free; // branch keyword (name) or library name
+          // Consume the branch value until the next branch or the ';'.
+          while (GetKind <> tkEOF) and (not IsSymbol(';')) and
+                (not HasConditionalStartTrivia) do
+            ParseExpression.Free; // the branch's value
         end;
         Result := True;
       end;
