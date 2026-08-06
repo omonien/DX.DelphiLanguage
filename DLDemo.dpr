@@ -66,6 +66,7 @@ var
   LSource: string;
   LDiagnostics: TDLDiagnostics;
   LTokens: TObjectList<TDLToken>;
+  LLexer: TDLDelphiLexer;
   LParser: TDLDelphiParser;
   LCST: TDLCompilationUnit;
   LBuilder: TDLDelphiAstBuilder;
@@ -89,7 +90,12 @@ begin
   LDiagnostics := TDLDiagnostics.Create;
   try
     // Lex
-    LTokens := TDLDelphiLexer.Create(LSource, LDiagnostics).Tokenize;
+    LLexer := TDLDelphiLexer.Create(LSource, LDiagnostics);
+    try
+      LTokens := LLexer.Tokenize;
+    finally
+      LLexer.Free;
+    end;
     try
       DumpTokens(LTokens);
 

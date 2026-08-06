@@ -40,8 +40,15 @@ implementation
 
 function LexSource(const ASource: string; ADiagnostics: TDLDiagnostics):
   TObjectList<TDLToken>;
+var
+  LLexer: TDLDelphiLexer;
 begin
-  Result := TDLDelphiLexer.Create(ASource, ADiagnostics).Tokenize;
+  LLexer := TDLDelphiLexer.Create(ASource, ADiagnostics);
+  try
+    Result := LLexer.Tokenize;
+  finally
+    LLexer.Free;
+  end;
 end;
 
 function ParseSource(const ASource: string; ADiagnostics: TDLDiagnostics):
