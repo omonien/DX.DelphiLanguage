@@ -200,6 +200,15 @@ begin
     finally
       LUnit.Free;
     end;
+    // Nested generic type arguments keep their full type-argument lists.
+    LUnit := CstProcedure(
+      'x := TDictionary<string, TList<Integer>>.Create;'#13#10, LDiagnostics);
+    try
+      Assert.AreEqual('TDictionary<string, TList<Integer>>.Create',
+        CstAssignmentValue(LUnit, 0).ToSourceText);
+    finally
+      LUnit.Free;
+    end;
   finally
     LDiagnostics.Free;
   end;
@@ -252,6 +261,14 @@ begin
     LModule := AstProcedure('x := inherited Foo;'#13#10, LDiagnostics);
     try
       Assert.AreEqual('inherited Foo',
+        AstAssignmentValue(LModule, 0).ToSourceText);
+    finally
+      LModule.Free;
+    end;
+    LModule := AstProcedure(
+      'x := TDictionary<string, TList<Integer>>.Create;'#13#10, LDiagnostics);
+    try
+      Assert.AreEqual('TDictionary<string, TList<Integer>>.Create',
         AstAssignmentValue(LModule, 0).ToSourceText);
     finally
       LModule.Free;

@@ -644,9 +644,9 @@ begin
     LAst := DX.Delphi.AST.TDLGenericInstExpr.Create(AExpr.Span,
       BuildExpression(LGeneric.Target));
     for LTypeArg in LGeneric.TypeArgs do
-      if LTypeArg.TypeExpr is DX.Delphi.CST.TDLNamedType then
+      if LTypeArg.TypeExpr <> nil then
         DX.Delphi.AST.TDLGenericInstExpr(LAst).TypeArgs.Add(
-          DX.Delphi.CST.TDLNamedType(LTypeArg.TypeExpr).Name.Name);
+          RenderTypeName(LTypeArg.TypeExpr));
     Result := LAst;
   end
   else if AExpr is DX.Delphi.CST.TDLInheritedExpr then

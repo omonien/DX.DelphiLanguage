@@ -3733,6 +3733,43 @@ begin
   Result := Result + ']';
 end;
 
+/// <summary>Renders a CST type expression as compact source text. Named
+/// types render recursively, so nested generics (TList&lt;Integer&gt;) keep
+/// their full type-argument list.</summary>
+function DLTypeExprText(ATypeExpr: TDLTypeExpr): string;
+var
+  LNamed: TDLNamedType;
+  LArg: TDLTypeArg;
+  i: Integer;
+begin
+  if ATypeExpr is TDLNamedType then
+  begin
+    LNamed := TDLNamedType(ATypeExpr);
+    Result := LNamed.Name.Name;
+    if LNamed.TypeArgs.Count > 0 then
+    begin
+      Result := Result + '<';
+      for i := 0 to LNamed.TypeArgs.Count - 1 do
+      begin
+        if i > 0 then
+          Result := Result + ', ';
+        LArg := LNamed.TypeArgs[i];
+        Result := Result + DLTypeExprText(LArg.TypeExpr);
+      end;
+      Result := Result + '>';
+    end;
+  end
+  else if ATypeExpr is TDLStringType then
+    Result := 'string'
+  else if ATypeExpr is TDLDynamicArrayType then
+    Result := 'array of ' + DLTypeExprText(
+      TDLDynamicArrayType(ATypeExpr).ElementType)
+  else if ATypeExpr is TDLPointerType then
+    Result := '^' + DLTypeExprText(TDLPointerType(ATypeExpr).Pointee)
+  else
+    Result := '?';
+end;
+
 function TDLGenericInstantiationExpr.ToSourceText: string;
 var
   i: Integer;
@@ -3742,10 +3779,7 @@ begin
   begin
     if i > 0 then
       Result := Result + ', ';
-    if FTypeArgs[i].TypeExpr is TDLNamedType then
-      Result := Result + TDLNamedType(FTypeArgs[i].TypeExpr).Name.Name
-    else
-      Result := Result + '?';
+    Result := Result + DLTypeExprText(FTypeArgs[i].TypeExpr);
   end;
   Result := Result + '>';
 end;
