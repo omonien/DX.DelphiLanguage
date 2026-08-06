@@ -182,20 +182,11 @@ begin
   LRoot := FindRtl;
   if LRoot = '' then
     Exit; // compiler RTL not installed on this machine
-  // Files currently hitting the recursion guards (deep-desync constructs
-  // under investigation). They are excluded from the no-crash assertion
-  // until fixed; removing them from this list is the progress metric.
   LOutcomes := ParseAllFiles(LRoot);
-  // Files currently hitting the recursion guards (deep-desync constructs
-  // under investigation). They are excluded from the no-crash assertion
-  // until fixed; removing them from this list is the progress metric.
-  LKnownCrashes := [
-    'System.IOUtils.pas',
-    'System.Skia.API.pas',
-    'System.pas',
-    'System-2026-05-22 11.50.05.pas',
-    'System.SysUtils.pas',
-    'Winapi.Windows.pas'];
+  // All previously-crashing RTL files (System.pas, System.IOUtils.pas,
+  // System.Skia.API.pas, System.SysUtils.pas, Winapi.Windows.pas and the
+  // System-2026-05-22 backup) now parse. Any crash therefore fails the test.
+  LKnownCrashes := [];
   LTotalErrors := 0;
   LTotalFiles := 0;
   for LOutcome in LOutcomes do

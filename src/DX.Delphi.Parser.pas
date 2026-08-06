@@ -2823,7 +2823,8 @@ begin
           begin
           if TDLTriviaAnalyzer.HasConditionalStart(GetCur) and
              (Peek(1).Kind = tkIdentifier) and
-             ((SameText(Peek(1).Text, LEnclosingName)) or
+             (TDLTriviaAnalyzer.HasConditionalContinuation(GetCur) or
+              (SameText(Peek(1).Text, LEnclosingName)) or
               ((Pos('.', LEnclosingName) > 0) and
                SameText(Peek(1).Text,
                  Copy(LEnclosingName, 1, Pos('.', LEnclosingName) - 1)))) then
@@ -4053,6 +4054,16 @@ begin
       try
       Advance;
       LTypeArgs := TList<TDLTypeArg>.Create;
+      // A token after '<' that cannot start a type argument (a literal, a
+      // unary operator or a separator) means this is a comparison such as
+      // 'a < -1' or 'a < 5': abort immediately so the speculation never
+      // scans the rest of the file looking for a '>'.
+      if (GetKind in [tkInteger, tkFloat, tkString, tkCharCode]) or
+         IsSymbol('-') or IsSymbol('+') or IsSymbol(';') or IsSymbol(')') or
+         IsSymbol(']') or IsSymbol(',') or IsSymbol('.') or IsSymbol(':') or
+         IsSymbol('>=') or IsSymbol('<=') or IsSymbol('<>') then
+        LOk := False
+      else
       while (GetKind <> tkEOF) and (not IsSymbol('>')) do
       begin
         if IsSymbol(',') then
@@ -4331,6 +4342,8 @@ var
   LMethod: TDLAnonymousMethodExpr;
   LStart: TDLSourceSpan;
   LIsReference: Boolean;
+  LDirectives: TList<TDLDirective>;
+  LDirective: TDLDirective;
 begin
   LStart := GetSpan;
   LIsReference := False;
@@ -4344,6 +4357,12 @@ begin
     LKind := prFunction;
     Advance;
   end;
+  // Declaration-style anonymous methods may carry a routine name
+  // (function Foo(...); external ...;); real anonymous methods start
+  // directly with '('. Only identifiers count as names so a following
+  // declaration section (procedure var ...; begin ... end) is not consumed.
+  if IsIdentifier then
+    MakeIdentifier.Free;
   LMethod := TDLAnonymousMethodExpr.Create(LStart, LKind, LIsReference);
   if IsSymbol('(') then
     LMethod.Params.AddRange(ParseParameterList);
@@ -4352,19 +4371,38 @@ begin
     Advance;
     LMethod.ReturnType := ParseTypeExpr;
   end;
-  // Local declarations (var/label/const/type) before the body.
+  // Local declarations (var/label/const/type/function/procedure) before
+  // the body. Nested routines are parsed header + body and discarded.
   while IsKeyword(kwVar) or IsKeyword(kwLabel) or IsKeyword(kwConst) or
-        IsKeyword(kwType) do
+        IsKeyword(kwType) or IsKeyword(kwFunction) or IsKeyword(kwProcedure) do
   begin
     case GetKeyword of
       kwVar: ParseVarSection(False).Free;
       kwLabel: ParseLabelSection.Free;
       kwConst: ParseConstSection.Free;
       kwType: ParseTypeSection.Free;
+      kwFunction: ParseMethodHeader(prFunction, cmNone, True).Free;
+      kwProcedure: ParseMethodHeader(prProcedure, cmNone, True).Free;
     end;
   end;
   if IsSymbol(';') then
-    Advance // declaration-style anonymous method without a body
+  begin
+    // Declaration-style anonymous method (function Foo(...); cdecl;
+    // external ...;): consume any directives so they do not leak into the
+    // enclosing statement list.
+    Advance;
+    if IsMethodDirectiveStart then
+    begin
+      LDirectives := TList<TDLDirective>.Create;
+      try
+        ParseMethodDirectivesAndSemicolons(LDirectives);
+      finally
+        for LDirective in LDirectives do
+          LDirective.Free;
+        LDirectives.Free;
+      end;
+    end;
+  end
   else
     LMethod.Body := ParseCompoundStmt;
   Result := LMethod;

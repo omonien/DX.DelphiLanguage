@@ -406,30 +406,34 @@ parse time), a define configuration selects the active path on demand via
 | 2 | Shared-`end` resolution: declarations/statements spanning conditional boundaries | **partly done** — member lists, assignment RHS, GUID attributes, conditional function bodies, and the recursion-depth leak from speculative generic lookahead are fixed; **5 RTL files still crash** with a depth crawl (see below) |
 | 3 | Formatter bridge: trivia/directive indentation + text re-generation from the branch tree | pending |
 
-### Remaining known-crash files
+### Known-crash files — resolved
 
 The fixture `Spring4DSourcesNeverCrash`/`RTLSourcesNeverCrash` assert that
-no corpus file crashes or hangs the parser; the files below are explicitly
-listed as known crashes and excluded from that assertion. Removing them
-from the list is the progress metric:
+no corpus file crashes or hangs the parser. The former crash list is now
+empty: all RTL crash files (`System.pas`, `System.IOUtils.pas`,
+`System.Skia.API.pas`, `System.SysUtils.pas`, `Winapi.Windows.pas` and the
+`System-2026-05-22` snapshot copy) parse, and the whole corpus (Delphi RTL
+584 files + Spring4D 180 files) runs without a single crash.
 
-- `System.pas` (crawl starts near `IsICUAvailable`, line 13267)
-- `System.IOUtils.pas`
-- `Winapi.Windows.pas`
-- `System.Skia.API.pas`
-- `System-2026-05-22 11.50.05.pas` (an RTL snapshot copy)
+The crashes shared two root causes, both fixed in the parser:
 
-All five share the same mechanism: a method-body continuation loop swallows
-the following declarations as nested body branches, growing `FStmtDepth`
-until the recursion guard trips. The depth-vs-progress guard described in
-the rdbg section is the diagnostic tool used to locate each crawl root;
-each root is then fixed by tightening the body-loop branch terms (the
-System.SysUtils fix is the completed example).
+- **Runaway generic-instantiation speculation**: `a < -1` / `a < 5`
+  comparisons triggered the speculative `<...>` type-argument scan, which
+  swallowed the rest of the file. The speculation now aborts immediately
+  when the token after `<` cannot start a type argument.
+- **Conditional method bodies**: `{$IF}/{$ELSE}` branches inside method
+  bodies containing alternate headers of different names, `function ...
+  external ...` import declarations, or anonymous methods with names/local
+  routines were misparsed as nested body branches, growing `FStmtDepth`
+  until the recursion guard tripped. Alternate headers are now recognised
+  by their `{$ELSE}` continuation, and declaration-style anonymous methods
+  consume their names and directives.
 
 ### Next steps
 
-1. Apply the same root-location + loop-term-tightening pass to the five
-   remaining crash files (target: remove them from the known-crash list).
+1. Reduce diagnostics: the formerly-crashing generated files still report
+   many parse errors (`Winapi.Windows.pas` 3158, `System.Skia.API.pas`
+   3025); these are the next optimisation targets.
 2. Implement the formatter bridge (step 3): document and test trivia /
    directive indentation and text re-generation from the branch tree.
 3. Re-measure the corpora and update this table after each step.
