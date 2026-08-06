@@ -88,6 +88,7 @@ type
     function HasDirectiveTrivia: Boolean;
     function HasConditionalStartTrivia: Boolean;
     function HasConditionalContinuationTrivia: Boolean;
+    function HasBareElseTrivia: Boolean;
     function HasConditionalBranchTrivia: Boolean;
     procedure SkipConditionalBranchesToEndIf;
     function LastConditionalDirective(out ACondition: TDLCondition)
@@ -515,6 +516,24 @@ begin
       end
       else
         LCond.Free;
+    end;
+end;
+
+function TDLDelphiParser.HasBareElseTrivia: Boolean;
+var
+  i: Integer;
+  LText: string;
+begin
+  // True only for a bare {$ELSE} directive (not {$ELSEIF}); the body-branch
+  // loop uses this so an {$ELSEIF} (outer chain, new declaration branch)
+  // stops it instead of swallowing the next function as a body branch.
+  Result := False;
+  for i := 0 to GetCur.LeadingTrivia.Count - 1 do
+    if GetCur.LeadingTrivia[i].Kind = trDirective then
+    begin
+      LText := LowerCase(Trim(GetCur.LeadingTrivia[i].Text));
+      if (Pos('{$else', LText) = 1) and (Pos('{$elseif', LText) <> 1) then
+        Exit(True);
     end;
 end;
 
@@ -1975,9 +1994,11 @@ var
   LBoundExpr: TDLExpr;
   LBoundHigh: TDLExpr;
   LName: string;
+  LSkipDepth: Boolean;
 begin
   // See ParseExpression: speculative generic lookahead must not grow depth.
-  if FSuppressCount = 0 then
+  LSkipDepth := FSuppressCount > 0;
+  if not LSkipDepth then
     Inc(FStmtDepth);
   if FStmtDepth > 200 then
     raise Exception.Create('DLP-FATAL: type recursion at "' + GetText +
@@ -2181,7 +2202,7 @@ begin
   while ((IsIdentifier) or (GetKind = tkKeyword)) and HasDirectiveTrivia do
     Advance;
   finally
-    if FSuppressCount = 0 then
+    if not LSkipDepth then
       Dec(FStmtDepth);
   end;
 end;
@@ -3204,10 +3225,10 @@ begin
           (((IsKeyword(kwBegin) or IsKeyword(kwAsm) or IsKeyword(kwVar) or
              IsKeyword(kwType) or IsKeyword(kwConst) or IsKeyword(kwLabel)) and
             (HasConditionalStartTrivia or FDirectiveStmt)) or
-           ((IsKeyword(kwProcedure) or IsKeyword(kwFunction)) and
-            (FDirectiveStmt or HasConditionalContinuationTrivia or
-             ((HasConditionalStartTrivia and (GetSpan.Start.Column > 1) and
-               SectionLeadsToBody)))) or
+          ((IsKeyword(kwProcedure) or IsKeyword(kwFunction)) and
+           (FDirectiveStmt or HasBareElseTrivia or
+            ((HasConditionalStartTrivia and (GetSpan.Start.Column > 1) and
+              SectionLeadsToBody)))) or
            (IsMethodDirectiveStart and HasConditionalStartTrivia)) do
     begin
       LContDirs := nil;
@@ -4261,13 +4282,16 @@ begin
 end;
 
 function TDLDelphiParser.ParseExpression: TDLExpr;
+var
+  LSkipDepth: Boolean;
 begin
   DLSetContext('expr:' + GetText);
   // During speculative generic-instantiation lookahead (FSuppressCount > 0)
   // the type-argument parses must not grow the recursion depth: the rollback
   // restores FPos, and nested ParseTypeExpr/ParseExpression calls would
   // otherwise leak depth and eventually trip the recursion guard.
-  if FSuppressCount = 0 then
+  LSkipDepth := FSuppressCount > 0;
+  if not LSkipDepth then
     Inc(FStmtDepth);
   if FStmtDepth > 200 then
     raise Exception.Create('DLP-FATAL: expression recursion at "' + GetText +
@@ -4275,7 +4299,7 @@ begin
   try
     Result := ParseBinary(0);
   finally
-    if FSuppressCount = 0 then
+    if not LSkipDepth then
       Dec(FStmtDepth);
   end;
 end;
