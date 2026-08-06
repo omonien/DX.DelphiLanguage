@@ -78,7 +78,6 @@ type
     procedure ExpectKeyword(AKeyword: TDLKeyword);
     procedure ExpectSemicolon;
     procedure Error(const AMessage: string);
-    procedure Warning(const AMessage: string);
     function MakeIdentifier: TDLIdentifier;
     function MakeIdentifierFromToken(AToken: TDLToken): TDLIdentifier;
     procedure ExpandDottedName(var AName: TDLIdentifier);
@@ -93,8 +92,6 @@ type
     procedure SkipConditionalBranchesToEndIf;
     function LastConditionalDirective(out ACondition: TDLCondition)
       : TDLConditionDirectiveKind;
-    function FirstConditionalDirective(out ACondition: TDLCondition)
-      : TDLConditionDirectiveKind;
     function CanStartConditionalGroup(ADeclGroup: Boolean): Boolean;
     function SingleConditionalInTrivia: Boolean;
     function ParseConditionalStatementGroup: TDLConditionalStmt;
@@ -107,7 +104,6 @@ type
     function SectionLeadsToBody: Boolean;
     procedure SkipConditionalExpressionBranches;
     procedure SkipUntil(const AKeywords: array of TDLKeyword);
-    procedure SkipToSemicolon;
     /// <summary>Consumes trailing platform/deprecated/experimental directives
     /// (optionally followed by a string literal).</summary>
     procedure SkipTrailingDeclDirectives;
@@ -339,12 +335,6 @@ begin
   if FSuppressCount = 0 then
     FDiagnostics.Error('DLP-01', AMessage, GetSpan);
   Advance;
-end;
-
-procedure TDLDelphiParser.Warning(const AMessage: string);
-begin
-  if FSuppressCount = 0 then
-    FDiagnostics.Warning('DLP-02', AMessage, GetSpan);
 end;
 
 function TDLDelphiParser.MakeIdentifierFromToken(AToken: TDLToken): TDLIdentifier;
@@ -626,36 +616,6 @@ begin
   end;
 end;
 
-function TDLDelphiParser.FirstConditionalDirective(
-  out ACondition: TDLCondition): TDLConditionDirectiveKind;
-var
-  i: Integer;
-  LCond: TDLCondition;
-  LKind: TDLConditionDirectiveKind;
-begin
-  // Examine the leading trivia of the current token and return the FIRST
-  // conditional directive (the outermost one). Inside a conditional group
-  // loop this is the directive that belongs to the group itself; later
-  // directives on the same token belong to nested groups that the enclosing
-  // parsing level will handle.
-  Result := cdNone;
-  ACondition := nil;
-  for i := 0 to GetCur.LeadingTrivia.Count - 1 do
-    if GetCur.LeadingTrivia[i].Kind = trDirective then
-    begin
-      LCond := nil;
-      LKind := ClassifyDirective(GetCur.LeadingTrivia[i].Text, LCond);
-      if LKind <> cdNone then
-      begin
-        ACondition := LCond;
-        Result := LKind;
-        Exit;
-      end
-      else
-        LCond.Free;
-    end;
-end;
-
 function TDLDelphiParser.CanStartConditionalGroup(ADeclGroup: Boolean): Boolean;
 var
   i: Integer;
@@ -775,7 +735,6 @@ function TDLDelphiParser.ParseConditionalStatementGroup: TDLConditionalStmt;
 var
   LGroup: TDLConditionalStmt;
   LBranch: TDLConditionalBranch;
-  LStartDepth: Integer;
   LDir: TDLConditionDirectiveKind;
   LCond: TDLCondition;
   LStatement: TDLStatement;
@@ -784,7 +743,6 @@ var
   LPrevPos: Integer;
 begin
   // Current token carries a conditional-start directive in its trivia.
-  LStartDepth := FConditionalDepth;
   Inc(FConditionalDepth);
   LGroup := TDLConditionalStmt.Create(GetSpan);
   LCond := nil;
@@ -999,14 +957,6 @@ begin
       Exit;
     Advance;
   end;
-end;
-
-procedure TDLDelphiParser.SkipToSemicolon;
-begin
-  while (GetKind <> tkEOF) and (not IsSymbol(';')) do
-    Advance;
-  if IsSymbol(';') then
-    Advance;
 end;
 
 procedure TDLDelphiParser.SkipTrailingDeclDirectives;
@@ -2812,7 +2762,6 @@ begin
   if IsSymbol('[') then
     ParseAttributes.Free; // member attributes; cosmetic for parsing
 
-  LClassModifier := cmNone;
   if IsKeyword(kwClass) then
   begin
     if IsKwAhead(kwVar, 1) or IsKwAhead(kwThreadvar, 1) then
@@ -3150,7 +3099,6 @@ begin
               SectionLeadsToBody)))) or
            (IsMethodDirectiveStart and HasConditionalStartTrivia)) do
     begin
-      LContDirs := nil;
       case GetKeyword of
         kwVar, kwType, kwConst, kwLabel:
           begin
@@ -3229,28 +3177,20 @@ function TDLDelphiParser.ParseMethodDirectives(
 var
   LDirective: TDLDirective;
   LName: TDLIdentifier;
-  LKeyword: TDLKeyword;
   LText: string;
 begin
   Result := False;
-  LKeyword := GetKeyword;
-  case LKeyword of
-    kwVirtual, kwDynamic, kwOverride, kwAbstract, kwReintroduce, kwOverload,
-    kwStatic, kwFinal, kwSealed, kwInline, kwAssembler, kwForward,
-    kwPlatform, kwExperimental, kwVarargs, kwUnsafe, kwFar, kwNear,
-    kwNoReturn,
-    kwRegister, kwPascal, kwCdecl, kwStdcall, kwSafecall:
-      begin
-        LDirective := TDLDirective.Create(GetSpan, MakeIdentifier);
-        ADirectives.Add(LDirective);
-        Result := True;
-      end;
+  // IsMethodDirectiveStart is the single source of truth for the directive
+  // token set (keywords plus identifier-spelled winapi/export/...); the
+  // parsing below only differentiates how the directive's values are read.
+  if not IsMethodDirectiveStart then
+    Exit;
+  case GetKeyword of
     kwMessage:
       begin
         LDirective := TDLDirective.Create(GetSpan, MakeIdentifier);
         ADirectives.Add(LDirective);
         LDirective.Values.Add(ParseExpression);
-        Result := True;
       end;
     kwDeprecated:
       begin
@@ -3258,7 +3198,6 @@ begin
         ADirectives.Add(LDirective);
         if GetKind = tkString then
           LDirective.Values.Add(ParseStringSequence);
-        Result := True;
       end;
     kwExternal:
       begin
@@ -3306,7 +3245,6 @@ begin
                 (not HasConditionalStartTrivia) do
             ParseExpression.Free; // the branch's value
         end;
-        Result := True;
       end;
   else
     LText := GetText;
@@ -3315,20 +3253,17 @@ begin
       LDirective := TDLDirective.Create(GetSpan, MakeIdentifier);
       ADirectives.Add(LDirective);
       LDirective.Values.Add(ParseExpression);
-      Result := True;
-      Exit;
-    end;
-    if IsIdentifier and
-       ((LowerCase(LText) = 'winapi') or (LowerCase(LText) = 'export') or
-        (LowerCase(LText) = 'delayed') or (LowerCase(LText) = 'safecall') or
-        (LowerCase(LText) = 'local')) then
+    end
+    else
     begin
+      // simple directive keyword (virtual, stdcall, ...) or identifier
+      // (winapi, export, delayed, local): MakeIdentifier accepts both.
       LName := MakeIdentifier;
       LDirective := TDLDirective.Create(LName.Span, LName);
       ADirectives.Add(LDirective);
-      Result := True;
     end;
   end;
+  Result := True;
 end;
 
 function TDLDelphiParser.IsMethodDirectiveStart: Boolean;
@@ -3562,7 +3497,6 @@ var
   LExpression: TDLExpr;
   LTarget: TDLExpr;
   LKeyword: TDLKeyword;
-  LLabelName: TDLIdentifier;
 begin
   LStart := GetSpan;
   DLSetContext('stmt:' + GetText);
@@ -3902,7 +3836,6 @@ begin
   end
   else
   begin
-    LDirection := kwIn;
     LFor := TDLForStmt.Create(LStart, LLoopVar, LIsInline, kwIn);
     LFor.EndExpr := ParseExpression;
     ExpectKeyword(kwDo);
@@ -4341,7 +4274,6 @@ begin
     begin
       // speculative generic instantiation
       LSavePos := FPos;
-      LTypeArgs := nil;
       LOk := False;
       Inc(FSuppressCount);
       try
@@ -4393,7 +4325,7 @@ begin
           TDLSourceSpan.Create(LExpression.Span.Start, GetSpan.Stop),
           LExpression);
         TDLGenericInstantiationExpr(LExpression).TypeArgs.AddRange(LTypeArgs);
-        LTypeArgs := nil;
+        LTypeArgs.Free; // wrapper only; the node now owns the type-arg items
       end
       else
         Break; // treat '<' as comparison in the caller
@@ -4576,7 +4508,6 @@ var
   LSet: TDLSetExpr;
   LArray: TDLArrayExpr;
   LExpression: TDLExpr;
-  LIsArray: Boolean;
 begin
   LStart := GetSpan;
   ExpectSymbol('[');
@@ -4585,7 +4516,6 @@ begin
   // unless elements contain ranges — simple heuristic: track ranges.
   LSet := TDLSetExpr.Create(LStart);
   LArray := TDLArrayExpr.Create(LStart);
-  LIsArray := False;
   while (GetKind <> tkEOF) and (not IsSymbol(']')) do
   begin
     LExpression := ParseExpression;

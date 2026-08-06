@@ -413,7 +413,6 @@ begin
   begin
     LWith := DX.Delphi.CST.TDLWithStmt(AStmt);
     LAst := DX.Delphi.AST.TDLWithStmt.Create(AStmt.Span);
-    LExpression := nil;
     for LExpression in LWith.Expressions do
       DX.Delphi.AST.TDLWithStmt(LAst).Expressions.Add(BuildExpression(LExpression));
     DX.Delphi.AST.TDLWithStmt(LAst).Body := BuildStatement(LWith.Body);

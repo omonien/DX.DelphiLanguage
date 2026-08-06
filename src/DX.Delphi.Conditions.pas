@@ -48,7 +48,6 @@ type
     FLeft: TDLCondition;
     FRight: TDLCondition;
     FOperand: TDLCondition;
-    function GetDisplayName: string;
   public
     constructor CreateDefined(const ASymbol: string);
     constructor CreateNotDefined(const ASymbol: string);
@@ -216,19 +215,6 @@ begin
   end;
 end;
 
-function TDLCondition.GetDisplayName: string;
-begin
-  case FKind of
-    ckDefined: Result := 'Defined';
-    ckNotDefined: Result := 'not Defined';
-    ckNot: Result := 'not';
-    ckAnd: Result := 'and';
-    ckOr: Result := 'or';
-  else
-    Result := 'else';
-  end;
-end;
-
 function TDLCondition.ToString: string;
 begin
   case FKind of
@@ -307,7 +293,6 @@ type
     procedure SkipWhitespace;
     function PeekWord: string;
     function PeekWordNoAdvance: string;
-    function AtEnd: Boolean;
     function ParsePrimary: TDLCondition;
     function ParseNot: TDLCondition;
     function ParseAnd: TDLCondition;
@@ -330,12 +315,6 @@ begin
   while (FPos <= Length(FText)) and
         CharInSet(FText[FPos], [' ', #9, #13, #10]) do
     Inc(FPos);
-end;
-
-function TConditionExprParser.AtEnd: Boolean;
-begin
-  SkipWhitespace;
-  Result := FPos > Length(FText);
 end;
 
 function TConditionExprParser.PeekWord: string;
@@ -404,7 +383,6 @@ end;
 
 function TConditionExprParser.ParseNot: TDLCondition;
 var
-  LWord: string;
   LOperand: TDLCondition;
 begin
   if SameText(PeekWordNoAdvance, 'not') then
