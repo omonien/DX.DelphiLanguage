@@ -108,6 +108,11 @@ type
     procedure SkipConditionalExpressionBranches;
     procedure SkipUntil(const AKeywords: array of TDLKeyword);
     procedure SkipToSemicolon;
+    /// <summary>Consumes trailing platform/deprecated/experimental directives
+    /// (optionally followed by a string literal).</summary>
+    procedure SkipTrailingDeclDirectives;
+    /// <summary>Maps a method keyword to its TDLProcKind.</summary>
+    function ProcKindFromKeyword(AKeyword: TDLKeyword): TDLProcKind;
 
     // Declarations
     function ParseCompilationUnit: TDLCompilationUnit;
@@ -1004,6 +1009,30 @@ begin
     Advance;
 end;
 
+procedure TDLDelphiParser.SkipTrailingDeclDirectives;
+begin
+  while IsKeyword(kwPlatform) or IsKeyword(kwDeprecated) or
+        IsKeyword(kwExperimental) do
+  begin
+    Advance;
+    if GetKind = tkString then
+      ParseStringSequence.Free;
+  end;
+end;
+
+function TDLDelphiParser.ProcKindFromKeyword(AKeyword: TDLKeyword): TDLProcKind;
+begin
+  case AKeyword of
+    kwProcedure: Result := prProcedure;
+    kwFunction: Result := prFunction;
+    kwConstructor: Result := prConstructor;
+    kwDestructor: Result := prDestructor;
+    kwOperator: Result := prOperator;
+  else
+    Result := prProcedure;
+  end;
+end;
+
 { ------------------------------------------------------------------ }
 { Top level                                                           }
 { ------------------------------------------------------------------ }
@@ -1230,7 +1259,6 @@ var
   LClause: TDLUsesClause;
   LReference: TDLUnitReference;
   LName: TDLIdentifier;
-  LFullName: string;
 begin
   LClause := TDLUsesClause.Create(GetSpan);
   while GetKind <> tkEOF do
@@ -1240,21 +1268,8 @@ begin
     if IsIdentifier or (GetKind = tkKeyword) then
     begin
       LName := MakeIdentifier;
-      LFullName := LName.Name;
-      while IsSymbol('.') do
-      begin
-        Advance;
-        if IsIdentifier or (GetKind = tkKeyword) then
-        begin
-          LName.Free;
-          LName := MakeIdentifier;
-          LFullName := LFullName + '.' + LName.Name;
-        end
-        else
-          Error('Expected unit name segment after "."');
-      end;
+      ExpandDottedName(LName);
       LReference := TDLUnitReference.Create(LName.Span, LName);
-      LReference.Name.SetName(LFullName);
       if IsKeyword(kwIn) then
       begin
         Advance;
@@ -1311,14 +1326,7 @@ begin
      IsKwAhead(kwDestructor, 1) or IsKwAhead(kwOperator, 1)) then
   begin
     Advance; // class
-    case GetKeyword of
-      kwFunction: LProcKind := prFunction;
-      kwProcedure: LProcKind := prProcedure;
-      kwConstructor: LProcKind := prConstructor;
-      kwOperator: LProcKind := prOperator;
-    else
-      LProcKind := prDestructor;
-    end;
+    LProcKind := ProcKindFromKeyword(GetKeyword);
     LMethod := ParseMethodHeader(LProcKind, cmClass, AAllowBodies);
     Result := LMethod;
     if (LAttributes <> nil) and (LAttributes.Count > 0) then
@@ -1347,13 +1355,7 @@ begin
       Result := ParseExportsClause;
     kwProcedure, kwFunction, kwConstructor, kwDestructor:
       begin
-        case LKeyword of
-          kwProcedure: LProcKind := prProcedure;
-          kwFunction: LProcKind := prFunction;
-          kwConstructor: LProcKind := prConstructor;
-        else
-          LProcKind := prDestructor;
-        end;
+        LProcKind := ProcKindFromKeyword(LKeyword);
         LMethod := ParseMethodHeader(LProcKind, cmNone, AAllowBodies);
         if LMethod is TDLMethodImpl then
           Result := LMethod
@@ -1500,13 +1502,7 @@ begin
     Advance; // 'type X = type Y' alias form
   LTypeExpr := ParseTypeExpr;
   // type X = ... platform/deprecated;  (directives after the type)
-  while IsKeyword(kwDeprecated) or IsKeyword(kwPlatform) or
-        IsKeyword(kwExperimental) do
-  begin
-    Advance;
-    if GetKind = tkString then
-      ParseStringSequence.Free;
-  end;
+  SkipTrailingDeclDirectives;
   LDecl := TDLTypeDecl.Create(TDLSourceSpan.Create(LStart.Start, GetSpan.Stop),
     LName, LTypeExpr);
   LDecl.LeadingTrivia.AddRange(LTrivia);
@@ -1699,13 +1695,7 @@ begin
     end;
   end;
   // const X = expr platform deprecated;  (multiple directives allowed)
-  while IsKeyword(kwDeprecated) or IsKeyword(kwPlatform) or
-        IsKeyword(kwExperimental) do
-  begin
-    Advance;
-    if GetKind = tkString then
-      ParseStringSequence.Free;
-  end;
+  SkipTrailingDeclDirectives;
   ExpectSemicolon;
   Result := LDecl;
 end;
@@ -1795,13 +1785,7 @@ begin
     LDecl.TypeExpr := ParseTypeExpr;
   end;
   // var X: T platform = value;  (directive between type and initializer)
-  while IsKeyword(kwPlatform) or IsKeyword(kwDeprecated) or
-        IsKeyword(kwExperimental) do
-  begin
-    Advance;
-    if GetKind = tkString then
-      ParseStringSequence.Free;
-  end;
+  SkipTrailingDeclDirectives;
   if IsKeyword(kwAbsolute) then
   begin
     Advance;
@@ -1849,13 +1833,7 @@ begin
     LDecl.Init := ParseExpression;
   end;
   // var X: T = nil platform deprecated;
-  while IsKeyword(kwPlatform) or IsKeyword(kwDeprecated) or
-        IsKeyword(kwExperimental) do
-  begin
-    Advance;
-    if GetKind = tkString then
-      ParseStringSequence.Free;
-  end;
+  SkipTrailingDeclDirectives;
   ExpectSemicolon;
   Result := LDecl;
 end;
@@ -2304,13 +2282,7 @@ begin
       Advance;
   end;
   // (a, b, c) platform/deprecated  -- directive after an enum type
-  if IsKeyword(kwPlatform) or IsKeyword(kwDeprecated) or
-     IsKeyword(kwExperimental) then
-  begin
-    Advance;
-    if GetKind = tkString then
-      ParseStringSequence.Free;
-  end;
+  SkipTrailingDeclDirectives;
   Result := LEnum;
 end;
 
@@ -2362,13 +2334,7 @@ begin
     if GetKind = tkInteger then
       Advance;
   end;
-  if IsKeyword(kwDeprecated) or IsKeyword(kwPlatform) or
-     IsKeyword(kwExperimental) then
-  begin
-    Advance;
-    if GetKind = tkString then
-      ParseStringSequence.Free;
-  end;
+  SkipTrailingDeclDirectives;
   Result := LRecord;
 end;
 
@@ -2594,13 +2560,7 @@ begin
       if GetKind = tkInteger then
         Advance;
     end;
-    if IsKeyword(kwDeprecated) or IsKeyword(kwPlatform) or
-       IsKeyword(kwExperimental) then
-    begin
-      Advance;
-      if GetKind = tkString then
-        ParseStringSequence.Free;
-    end;
+    SkipTrailingDeclDirectives;
   end;
   LClass := TDLClassType.Create(LStart, LIsSealed, LIsAbstract, LIsHelper,
     LIsClassRef, LIsDisp, LIsObject, LIsInterface, LBase, LHelperFor, LMembers);
@@ -2877,22 +2837,16 @@ begin
             IsKwAhead(kwConstructor, 1) or IsKwAhead(kwDestructor, 1) or
             IsKwAhead(kwProperty, 1) then
     begin
-      Advance; // class
-      LClassModifier := cmClass;
-      LKeyword := GetKeyword;
-      case LKeyword of
-        kwProperty:
-          begin
-            AMembers.Add(ParsePropertyDecl);
-            Exit;
-          end;
-        kwConstructor: LProcKind := prConstructor;
-        kwDestructor: LProcKind := prDestructor;
-        kwFunction: LProcKind := prFunction;
-      else
-        LProcKind := prProcedure;
-      end;
-      LMethod := ParseMethodHeader(LProcKind, LClassModifier, False);
+    Advance; // class
+    LClassModifier := cmClass;
+    LKeyword := GetKeyword;
+    if LKeyword = kwProperty then
+    begin
+      AMembers.Add(ParsePropertyDecl);
+      Exit;
+    end;
+    LProcKind := ProcKindFromKeyword(LKeyword);
+    LMethod := ParseMethodHeader(LProcKind, LClassModifier, False);
       AMembers.Add(TDLMember(LMethod));
       Exit;
     end
@@ -2916,13 +2870,7 @@ begin
   case LKeyword of
     kwProcedure, kwFunction, kwConstructor, kwDestructor:
       begin
-        case LKeyword of
-          kwProcedure: LProcKind := prProcedure;
-          kwFunction: LProcKind := prFunction;
-          kwConstructor: LProcKind := prConstructor;
-        else
-          LProcKind := prDestructor;
-        end;
+        LProcKind := ProcKindFromKeyword(LKeyword);
         LMethod := ParseMethodHeader(LProcKind, cmNone, False);
         AMembers.Add(TDLMember(LMethod));
       end;
@@ -2986,13 +2934,7 @@ begin
   ExpectSymbol(':');
   LField.TypeExpr := ParseTypeExpr;
   // FHandle: THandle platform;
-  while IsKeyword(kwPlatform) or IsKeyword(kwDeprecated) or
-        IsKeyword(kwExperimental) do
-  begin
-    Advance;
-    if GetKind = tkString then
-      ParseStringSequence.Free;
-  end;
+  SkipTrailingDeclDirectives;
   Result := LField;
 end;
 
@@ -3011,7 +2953,6 @@ var
   LEnclosingName: string;
   LBodyConditional: Boolean;
   LDbgLine: Integer;
-  LFullName: string;
   LTrivia: TList<TDLTrivia>;
 begin
   LStart := GetSpan;
@@ -3049,18 +2990,7 @@ begin
   if LName = nil then
     LName := MakeIdentifier;
   // Qualified implementation names (procedure TFoo.Bar;).
-  if IsSymbol('.') then
-  begin
-    LFullName := LName.Name;
-    while IsSymbol('.') do
-    begin
-      Advance;
-      LName.Free;
-      LName := MakeIdentifier;
-      LFullName := LFullName + '.' + LName.Name;
-    end;
-    LName.SetName(LFullName);
-  end;
+  ExpandDottedName(LName);
   // Generic method type parameters (procedure TCls.DoIt<T>(...)).
   if IsSymbol('<') then
   begin
@@ -3083,18 +3013,7 @@ begin
     end;
     ExpectSymbol('>');
     // Generic class name with a member method: TCls<T>.Method
-    if IsSymbol('.') then
-    begin
-      LFullName := LName.Name;
-      while IsSymbol('.') do
-      begin
-        Advance;
-        LName.Free;
-        LName := MakeIdentifier;
-        LFullName := LFullName + '.' + LName.Name;
-      end;
-      LName.SetName(LFullName);
-    end;
+    ExpandDottedName(LName);
   end;
   // Interface-implementation mapping:  function IRef.M = ImplMethod;
   if IsSymbol('=') then
