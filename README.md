@@ -372,3 +372,45 @@ site (e.g. the `FStmtDepth > 200` guard inside `ParseExpression`).
   more than 5000 tokens); this located the System.pas crawl root at
   `IsICUAvailable` and, combined with tightening the body-loop
   function/procedure term, fixed the System.SysUtils crash.
+
+## Development plan & status
+
+The conditional-compilation work is tracked in three steps. Everything is
+kept structural: **all branches stay in the CST/AST** (no evaluation at
+parse time), a define configuration selects the active path on demand via
+`TDLTreeProjector`, and formatters consume the full tree + trivia.
+
+| Step | Scope | Status |
+|---|---|---|
+| 1a | Conditional groups in **type** sections (`TDLConditionalGroup` in CST, `TDLConditionalDeclGroup` in AST) | done — 2 tests, 187/187 green at the time |
+| 1b | Conditional groups in **const/var** sections (generalised `ParseConditionalDeclGroup` with item-parser method pointer) | done — 2 tests |
+| 2 | Shared-`end` resolution: declarations/statements spanning conditional boundaries | **partly done** — member lists, assignment RHS, GUID attributes, conditional function bodies, and the recursion-depth leak from speculative generic lookahead are fixed; **5 RTL files still crash** with a depth crawl (see below) |
+| 3 | Formatter bridge: trivia/directive indentation + text re-generation from the branch tree | pending |
+
+### Remaining known-crash files
+
+The fixture `Spring4DSourcesNeverCrash`/`RTLSourcesNeverCrash` assert that
+no corpus file crashes or hangs the parser; the files below are explicitly
+listed as known crashes and excluded from that assertion. Removing them
+from the list is the progress metric:
+
+- `System.pas` (crawl starts near `IsICUAvailable`, line 13267)
+- `System.IOUtils.pas`
+- `Winapi.Windows.pas`
+- `System.Skia.API.pas`
+- `System-2026-05-22 11.50.05.pas` (an RTL snapshot copy)
+
+All five share the same mechanism: a method-body continuation loop swallows
+the following declarations as nested body branches, growing `FStmtDepth`
+until the recursion guard trips. The depth-vs-progress guard described in
+the rdbg section is the diagnostic tool used to locate each crawl root;
+each root is then fixed by tightening the body-loop branch terms (the
+System.SysUtils fix is the completed example).
+
+### Next steps
+
+1. Apply the same root-location + loop-term-tightening pass to the five
+   remaining crash files (target: remove them from the known-crash list).
+2. Implement the formatter bridge (step 3): document and test trivia /
+   directive indentation and text re-generation from the branch tree.
+3. Re-measure the corpora and update this table after each step.
