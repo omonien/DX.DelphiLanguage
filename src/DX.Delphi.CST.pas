@@ -16,8 +16,10 @@
 ///   fields; the full statement and expression grammar (including inline var
 ///   declarations, anonymous methods and multiline strings).
 ///
-///   Nodes are deliberately plain data holders; all logic lives in the parser
-///   and in the CST -> AST lowering pass (DX.Delphi.AstBuilder).
+///   Nodes are data holders that also implement their own rendering
+///   (Dump for tree dumps, ToSourceText for compact expression text);
+///   all grammar/parsing logic lives in the parser and in the CST -> AST
+///   lowering pass (DX.Delphi.AstBuilder).
 /// </remarks>
 /// <author>Olaf Monien</author>
 /// <created>2026-08-04</created>
