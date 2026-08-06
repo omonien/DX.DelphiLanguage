@@ -858,19 +858,22 @@ end;
 class function TDLTriviaAnalyzer.HasConditionalStart(AToken: TDLToken): Boolean;
 var
   i: Integer;
-  LText: string;
+  LKind: TDLConditionDirectiveKind;
+  LCond: TDLCondition;
 begin
   // True when a compiler directive in the leading trivia OPENS a conditional
   // branch ({$IFDEF}, {$IFNDEF}, {$IF ...}, {$ELSE}, {$ELSEIF}). An {$ENDIF}
   // closes a branch and must not trigger body/branch continuation handling.
+  // Classification goes through the shared ClassifyDirective so brace- and
+  // paren-style directives behave like the other analyzer predicates.
   Result := False;
   for i := 0 to AToken.LeadingTrivia.Count - 1 do
     if AToken.LeadingTrivia[i].Kind = trDirective then
     begin
-      LText := LowerCase(Trim(AToken.LeadingTrivia[i].Text));
-      if (Pos('{$ifdef', LText) = 1) or (Pos('{$ifndef', LText) = 1) or
-         (Pos('{$if ', LText) = 1) or (Pos('{$if(', LText) = 1) or
-         (Pos('{$else', LText) = 1) then
+      LCond := nil;
+      LKind := ClassifyDirective(AToken.LeadingTrivia[i].Text, LCond);
+      LCond.Free;
+      if LKind in [cdStart, cdElseIf, cdElse] then
         Exit(True);
     end;
 end;
@@ -879,7 +882,8 @@ class function TDLTriviaAnalyzer.HasConditionalContinuation(
   AToken: TDLToken): Boolean;
 var
   i: Integer;
-  LText: string;
+  LKind: TDLConditionDirectiveKind;
+  LCond: TDLCondition;
 begin
   // True only for {$ELSE}/{$ELSEIF} directives (continuation of the CURRENT
   // conditional branch chain), never for a fresh {$IFDEF}/{$IF}.
@@ -887,8 +891,10 @@ begin
   for i := 0 to AToken.LeadingTrivia.Count - 1 do
     if AToken.LeadingTrivia[i].Kind = trDirective then
     begin
-      LText := LowerCase(Trim(AToken.LeadingTrivia[i].Text));
-      if Pos('{$else', LText) = 1 then
+      LCond := nil;
+      LKind := ClassifyDirective(AToken.LeadingTrivia[i].Text, LCond);
+      LCond.Free;
+      if LKind in [cdElseIf, cdElse] then
         Exit(True);
     end;
 end;
@@ -896,7 +902,8 @@ end;
 class function TDLTriviaAnalyzer.HasBareElse(AToken: TDLToken): Boolean;
 var
   i: Integer;
-  LText: string;
+  LKind: TDLConditionDirectiveKind;
+  LCond: TDLCondition;
 begin
   // True only for a bare {$ELSE} directive (not {$ELSEIF}); the body-branch
   // loop uses this so an {$ELSEIF} (outer chain, new declaration branch)
@@ -905,8 +912,10 @@ begin
   for i := 0 to AToken.LeadingTrivia.Count - 1 do
     if AToken.LeadingTrivia[i].Kind = trDirective then
     begin
-      LText := LowerCase(Trim(AToken.LeadingTrivia[i].Text));
-      if (Pos('{$else', LText) = 1) and (Pos('{$elseif', LText) <> 1) then
+      LCond := nil;
+      LKind := ClassifyDirective(AToken.LeadingTrivia[i].Text, LCond);
+      LCond.Free;
+      if LKind = cdElse then
         Exit(True);
     end;
 end;
@@ -1066,9 +1075,21 @@ begin
     begin
       if (LTok.Text = 'begin') or (LTok.Text = 'case') or
          (LTok.Text = 'repeat') or (LTok.Text = 'try') or
-         (LTok.Text = 'record') or (LTok.Text = 'class') or
-         (LTok.Text = 'interface') or (LTok.Text = 'object') or
-         (LTok.Text = 'dispinterface') then
+         (LTok.Text = 'record') or (LTok.Text = 'object') or
+         (LTok.Text = 'dispinterface') or
+         // 'class' only opens a block when it is not a class-reference
+         // ('class of') or a member prefix ('class function/procedure/var/
+         // property/...'), which have no matching 'end'.
+         ((LTok.Text = 'class') and not
+          ((Peek(i + 1).Kind = tkKeyword) and
+            ((Peek(i + 1).Text = 'of') or (Peek(i + 1).Text = 'function') or
+             (Peek(i + 1).Text = 'procedure') or (Peek(i + 1).Text = 'var') or
+             (Peek(i + 1).Text = 'threadvar') or
+             (Peek(i + 1).Text = 'const') or (Peek(i + 1).Text = 'property') or
+             (Peek(i + 1).Text = 'operator') or
+             (Peek(i + 1).Text = 'constructor') or
+             (Peek(i + 1).Text = 'destructor') or
+             (Peek(i + 1).Text = 'helper')))) then
         Inc(LStmtDepth)
       else if (LTok.Text = 'end') or (LTok.Text = 'until') then
         Dec(LStmtDepth);

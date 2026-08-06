@@ -98,6 +98,9 @@ type
     /// <summary>Consumes trailing platform/deprecated/experimental directives
     /// (optionally followed by a string literal).</summary>
     procedure SkipTrailingDeclDirectives;
+    /// <summary>True when the current token opens a clean declaration
+    /// conditional group that the flat group model can represent.</summary>
+    function IsCleanDeclGroupStart: Boolean;
     /// <summary>Maps a method keyword to its TDLProcKind.</summary>
     function ProcKindFromKeyword(AKeyword: TDLKeyword): TDLProcKind;
 
@@ -729,6 +732,13 @@ begin
   end;
 end;
 
+function TDLDelphiParser.IsCleanDeclGroupStart: Boolean;
+begin
+  Result := TDLTriviaAnalyzer.HasConditionalStart(GetCur) and
+    TDLTriviaAnalyzer.CanStartConditionalGroup(FTokens, FPos, True) and
+    TDLTriviaAnalyzer.SingleConditional(GetCur);
+end;
+
 function TDLDelphiParser.ProcKindFromKeyword(AKeyword: TDLKeyword): TDLProcKind;
 begin
   case AKeyword of
@@ -1131,8 +1141,7 @@ begin
     if (GetKind = tkIdentifier) or IsSoftNameKeyword then
     begin
       // A clean conditional group: {$IFDEF X} A = ...; {$ELSE} B = ...; {$ENDIF}
-      if TDLTriviaAnalyzer.HasConditionalStart(GetCur) and TDLTriviaAnalyzer.CanStartConditionalGroup(FTokens, FPos, True) and
-         TDLTriviaAnalyzer.SingleConditional(GetCur) then
+      if IsCleanDeclGroupStart then
         LSection.Items.Add(ParseConditionalDeclGroup(ParseTypeDeclNode))
       else if LSawConditional and IsSymbolAhead('=', 1) and
          not ((Peek(2).Kind = tkInteger) and
@@ -1285,8 +1294,7 @@ begin
     if (GetKind = tkIdentifier) or IsSoftNameKeyword then
     begin
       // A clean conditional group: {$IFDEF X} A = ...; {$ELSE} A = ...; {$ENDIF}
-      if TDLTriviaAnalyzer.HasConditionalStart(GetCur) and TDLTriviaAnalyzer.CanStartConditionalGroup(FTokens, FPos, True) and
-         TDLTriviaAnalyzer.SingleConditional(GetCur) then
+      if IsCleanDeclGroupStart then
         LSection.Items.Add(ParseConditionalDeclGroup(ParseConstDeclNode))
       else
         LSection.Items.Add(ParseConstDecl);
@@ -1301,7 +1309,7 @@ begin
     // {$ENDIF}) is handled by the outer loop as a structural group; do not
     // skip its branches here.
     while TDLTriviaAnalyzer.HasConditionalStart(GetCur) and
-          not (TDLTriviaAnalyzer.CanStartConditionalGroup(FTokens, FPos, True) and TDLTriviaAnalyzer.SingleConditional(GetCur)) and
+          not IsCleanDeclGroupStart and
           ((GetKind in [tkString, tkInteger, tkFloat, tkCharCode]) or
            IsIdentifier or IsSymbol('[')) do
     begin
@@ -1455,8 +1463,7 @@ begin
     begin
       // A clean conditional group:
       //   {$IFDEF X} A: T; {$ELSE} A: U; {$ENDIF}
-      if TDLTriviaAnalyzer.HasConditionalStart(GetCur) and TDLTriviaAnalyzer.CanStartConditionalGroup(FTokens, FPos, True) and
-         TDLTriviaAnalyzer.SingleConditional(GetCur) then
+      if IsCleanDeclGroupStart then
         LSection.Items.Add(ParseConditionalDeclGroup(ParseVarDeclNode))
       else
         LSection.Items.Add(ParseVarDecl);
