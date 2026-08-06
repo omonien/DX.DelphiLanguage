@@ -68,10 +68,10 @@ type
   private
     FKind: TDLProgramKind;
     FName: string;
-    FUses: TList<TDLUse>;
-    FDeclarations: TList<TDLDeclaration>;
-    FInitStatements: TList<TDLStmt>;
-    FFinalStatements: TList<TDLStmt>;
+    FUses: TObjectList<TDLUse>;
+    FDeclarations: TObjectList<TDLDeclaration>;
+    FInitStatements: TObjectList<TDLStmt>;
+    FFinalStatements: TObjectList<TDLStmt>;
   public
     constructor Create(ASpan: TDLSourceSpan; AKind: TDLProgramKind;
       const AName: string);
@@ -79,10 +79,10 @@ type
     procedure Dump(ABuilder: TStringBuilder; AIndent: Integer); override;
     property Kind: TDLProgramKind read FKind;
     property Name: string read FName;
-    property UsedUnits: TList<TDLUse> read FUses;
-    property Declarations: TList<TDLDeclaration> read FDeclarations;
-    property InitStatements: TList<TDLStmt> read FInitStatements;
-    property FinalStatements: TList<TDLStmt> read FFinalStatements;
+    property UsedUnits: TObjectList<TDLUse> read FUses;
+    property Declarations: TObjectList<TDLDeclaration> read FDeclarations;
+    property InitStatements: TObjectList<TDLStmt> read FInitStatements;
+    property FinalStatements: TObjectList<TDLStmt> read FFinalStatements;
   end;
 
   /// <summary>A declaration at module scope.</summary>
@@ -93,13 +93,13 @@ type
   TDLConditionalDeclBranch = class(TDLNode)
   private
     FCondition: TDLCondition;
-    FItems: TList<TDLDeclaration>;
+    FItems: TObjectList<TDLDeclaration>;
   public
     constructor Create(ASpan: TDLSourceSpan; ACondition: TDLCondition);
     destructor Destroy; override;
     procedure Dump(ABuilder: TStringBuilder; AIndent: Integer); override;
     property Condition: TDLCondition read FCondition;
-    property Items: TList<TDLDeclaration> read FItems;
+    property Items: TObjectList<TDLDeclaration> read FItems;
   end;
 
   /// <summary>
@@ -108,12 +108,12 @@ type
   /// </summary>
   TDLConditionalDeclGroup = class(TDLDeclaration)
   private
-    FBranches: TList<TDLConditionalDeclBranch>;
+    FBranches: TObjectList<TDLConditionalDeclBranch>;
   public
     constructor Create(ASpan: TDLSourceSpan);
     destructor Destroy; override;
     procedure Dump(ABuilder: TStringBuilder; AIndent: Integer); override;
-    property Branches: TList<TDLConditionalDeclBranch> read FBranches;
+    property Branches: TObjectList<TDLConditionalDeclBranch> read FBranches;
   end;
 
   /// <summary>A type definition (right-hand side of 'Name = ...').</summary>
@@ -167,13 +167,13 @@ type
   /// <summary>class var section.</summary>
   TDLClassVar = class(TDLMember)
   private
-    FFields: TList<TDLField>;
+    FFields: TObjectList<TDLField>;
   public
     constructor Create(ASpan: TDLSourceSpan; AVisibility: TDLVisibility;
       AIsStrict: Boolean);
     destructor Destroy; override;
     procedure Dump(ABuilder: TStringBuilder; AIndent: Integer); override;
-    property Fields: TList<TDLField> read FFields;
+    property Fields: TObjectList<TDLField> read FFields;
   end;
 
   /// <summary>A method (declaration or implementation).</summary>
@@ -183,13 +183,13 @@ type
     FName: string;
     FIsClass: Boolean;
     FIsStatic: Boolean;
-    FParams: TList<TDLParam>;
+    FParams: TObjectList<TDLParam>;
     FReturnType: string;
-    FBody: TList<TDLStmt>;
+    FBody: TObjectList<TDLStmt>;
     FHasBody: Boolean;
     FDirectives: TList<string>;
     FOperatorName: string;
-    FLocalDeclarations: TList<TDLDeclaration>;
+    FLocalDeclarations: TObjectList<TDLDeclaration>;
   public
     constructor Create(ASpan: TDLSourceSpan; AKind: TDLProcKind;
       const AName: string; AIsClass: Boolean; AVisibility: TDLVisibility);
@@ -199,14 +199,14 @@ type
     property Name: string read FName;
     property IsClass: Boolean read FIsClass write FIsClass;
     property IsStatic: Boolean read FIsStatic write FIsStatic;
-    property Params: TList<TDLParam> read FParams;
+    property Params: TObjectList<TDLParam> read FParams;
     property ReturnType: string read FReturnType write FReturnType;
-    property Body: TList<TDLStmt> read FBody;
+    property Body: TObjectList<TDLStmt> read FBody;
     property HasBody: Boolean read FHasBody write FHasBody;
     property Directives: TList<string> read FDirectives;
     property OperatorName: string read FOperatorName write FOperatorName;
     /// <summary>Local declarations (vars/labels/consts/types) of the body.</summary>
-    property LocalDeclarations: TList<TDLDeclaration> read FLocalDeclarations;
+    property LocalDeclarations: TObjectList<TDLDeclaration> read FLocalDeclarations;
   end;
 
   /// <summary>A property declaration.</summary>
@@ -214,7 +214,7 @@ type
   private
     FName: string;
     FTypeName: string;
-    FIndexParams: TList<TDLParam>;
+    FIndexParams: TObjectList<TDLParam>;
     FReadName: string;
     FWriteName: string;
     FStoredName: string;
@@ -228,7 +228,7 @@ type
     procedure Dump(ABuilder: TStringBuilder; AIndent: Integer); override;
     property Name: string read FName;
     property TypeName: string read FTypeName write FTypeName;
-    property IndexParams: TList<TDLParam> read FIndexParams;
+    property IndexParams: TObjectList<TDLParam> read FIndexParams;
     property ReadName: string read FReadName write FReadName;
     property WriteName: string read FWriteName write FWriteName;
     property StoredName: string read FStoredName write FStoredName;
@@ -243,8 +243,8 @@ type
     FTag: string;
     FTagType: string;
     FLabels: TList<string>;
-    FFields: TList<TDLField>;
-    FSubVariants: TList<TDLVariantPart>;
+    FFields: TObjectList<TDLField>;
+    FSubVariants: TObjectList<TDLVariantPart>;
   public
     constructor Create(ASpan: TDLSourceSpan);
     destructor Destroy; override;
@@ -252,8 +252,8 @@ type
     property Tag: string read FTag write FTag;
     property TagType: string read FTagType write FTagType;
     property Labels: TList<string> read FLabels;
-    property Fields: TList<TDLField> read FFields;
-    property SubVariants: TList<TDLVariantPart> read FSubVariants;
+    property Fields: TObjectList<TDLField> read FFields;
+    property SubVariants: TObjectList<TDLVariantPart> read FSubVariants;
   end;
 
   /// <summary>Named type reference (optionally generic).</summary>
@@ -361,14 +361,14 @@ type
   TDLRecordTypeDef = class(TDLTypeDef)
   private
     FIsPacked: Boolean;
-    FMembers: TList<TDLMember>;
+    FMembers: TObjectList<TDLMember>;
     FVariantPart: TDLVariantPart;
   public
     constructor Create(ASpan: TDLSourceSpan; AIsPacked: Boolean);
     destructor Destroy; override;
     procedure Dump(ABuilder: TStringBuilder; AIndent: Integer); override;
     property IsPacked: Boolean read FIsPacked;
-    property Members: TList<TDLMember> read FMembers;
+    property Members: TObjectList<TDLMember> read FMembers;
     property VariantPart: TDLVariantPart read FVariantPart write FVariantPart;
   end;
 
@@ -380,7 +380,7 @@ type
     FAncestor: string;
     FHelperFor: string;
     FInterfaces: TList<string>;
-    FMembers: TList<TDLMember>;
+    FMembers: TObjectList<TDLMember>;
   public
     constructor Create(ASpan: TDLSourceSpan; const AKind: string;
       const AAncestor: string);
@@ -390,7 +390,7 @@ type
     property Ancestor: string read FAncestor;
     property HelperFor: string read FHelperFor write FHelperFor;
     property Interfaces: TList<string> read FInterfaces;
-    property Members: TList<TDLMember> read FMembers;
+    property Members: TObjectList<TDLMember> read FMembers;
   end;
 
   /// <summary>Procedural type.</summary>
@@ -399,7 +399,7 @@ type
     FKind: TDLProcKind;
     FIsOfObject: Boolean;
     FIsReferenceTo: Boolean;
-    FParams: TList<TDLParam>;
+    FParams: TObjectList<TDLParam>;
     FReturnType: string;
   public
     constructor Create(ASpan: TDLSourceSpan; AKind: TDLProcKind;
@@ -409,7 +409,7 @@ type
     property Kind: TDLProcKind read FKind;
     property IsOfObject: Boolean read FIsOfObject;
     property IsReferenceTo: Boolean read FIsReferenceTo;
-    property Params: TList<TDLParam> read FParams;
+    property Params: TObjectList<TDLParam> read FParams;
     property ReturnType: string read FReturnType write FReturnType;
   end;
 
@@ -507,12 +507,12 @@ type
     FKind: TDLProcKind;
     FName: string;
     FIsClass: Boolean;
-    FParams: TList<TDLParam>;
+    FParams: TObjectList<TDLParam>;
     FReturnType: string;
-    FBody: TList<TDLStmt>;
+    FBody: TObjectList<TDLStmt>;
     FHasBody: Boolean;
     FDirectives: TList<string>;
-    FLocalDeclarations: TList<TDLDeclaration>;
+    FLocalDeclarations: TObjectList<TDLDeclaration>;
   public
     constructor Create(ASpan: TDLSourceSpan; AKind: TDLProcKind;
       const AName: string; AIsClass: Boolean);
@@ -521,13 +521,13 @@ type
     property Kind: TDLProcKind read FKind;
     property Name: string read FName;
     property IsClass: Boolean read FIsClass;
-    property Params: TList<TDLParam> read FParams;
+    property Params: TObjectList<TDLParam> read FParams;
     property ReturnType: string read FReturnType write FReturnType;
-    property Body: TList<TDLStmt> read FBody;
+    property Body: TObjectList<TDLStmt> read FBody;
     property HasBody: Boolean read FHasBody write FHasBody;
     property Directives: TList<string> read FDirectives;
     /// <summary>Local declarations (vars/labels/consts/types) of the body.</summary>
-    property LocalDeclarations: TList<TDLDeclaration> read FLocalDeclarations;
+    property LocalDeclarations: TObjectList<TDLDeclaration> read FLocalDeclarations;
   end;
 
   /// <summary>Export item.</summary>
@@ -555,12 +555,12 @@ type
   /// <summary>A block of statements.</summary>
   TDLBlock = class(TDLStmt)
   private
-    FStatements: TList<TDLStmt>;
+    FStatements: TObjectList<TDLStmt>;
   public
     constructor Create(ASpan: TDLSourceSpan);
     destructor Destroy; override;
     procedure Dump(ABuilder: TStringBuilder; AIndent: Integer); override;
-    property Statements: TList<TDLStmt> read FStatements;
+    property Statements: TObjectList<TDLStmt> read FStatements;
   end;
 
   /// <summary>if statement.</summary>
@@ -582,13 +582,13 @@ type
   /// <summary>One case selector.</summary>
   TDLCaseSelector = class(TDLNode)
   private
-    FLabels: TList<TDLExpr>;
+    FLabels: TObjectList<TDLExpr>;
     FStatement: TDLStmt;
   public
     constructor Create(ASpan: TDLSourceSpan);
     destructor Destroy; override;
     procedure Dump(ABuilder: TStringBuilder; AIndent: Integer); override;
-    property Labels: TList<TDLExpr> read FLabels;
+    property Labels: TObjectList<TDLExpr> read FLabels;
     property Statement: TDLStmt read FStatement write FStatement;
   end;
 
@@ -596,14 +596,14 @@ type
   TDLCaseStmt = class(TDLStmt)
   private
     FSubject: TDLExpr;
-    FSelectors: TList<TDLCaseSelector>;
+    FSelectors: TObjectList<TDLCaseSelector>;
     FElseBranch: TDLStmt;
   public
     constructor Create(ASpan: TDLSourceSpan; ASubject: TDLExpr);
     destructor Destroy; override;
     procedure Dump(ABuilder: TStringBuilder; AIndent: Integer); override;
     property Subject: TDLExpr read FSubject;
-    property Selectors: TList<TDLCaseSelector> read FSelectors;
+    property Selectors: TObjectList<TDLCaseSelector> read FSelectors;
     property ElseBranch: TDLStmt read FElseBranch write FElseBranch;
   end;
 
@@ -658,13 +658,13 @@ type
   /// <summary>with statement.</summary>
   TDLWithStmt = class(TDLStmt)
   private
-    FExpressions: TList<TDLExpr>;
+    FExpressions: TObjectList<TDLExpr>;
     FBody: TDLStmt;
   public
     constructor Create(ASpan: TDLSourceSpan);
     destructor Destroy; override;
     procedure Dump(ABuilder: TStringBuilder; AIndent: Integer); override;
-    property Expressions: TList<TDLExpr> read FExpressions;
+    property Expressions: TObjectList<TDLExpr> read FExpressions;
     property Body: TDLStmt read FBody write FBody;
   end;
 
@@ -673,7 +673,7 @@ type
   private
     FBody: TDLStmt;
     FIsExcept: Boolean;
-    FHandlers: TList<TDLOnHandler>;
+    FHandlers: TObjectList<TDLOnHandler>;
     FElseBranch: TDLStmt;
     FFinallyBody: TDLStmt;
   public
@@ -682,7 +682,7 @@ type
     procedure Dump(ABuilder: TStringBuilder; AIndent: Integer); override;
     property Body: TDLStmt read FBody write FBody;
     property IsExcept: Boolean read FIsExcept;
-    property Handlers: TList<TDLOnHandler> read FHandlers;
+    property Handlers: TObjectList<TDLOnHandler> read FHandlers;
     property ElseBranch: TDLStmt read FElseBranch write FElseBranch;
     property FinallyBody: TDLStmt read FFinallyBody write FFinallyBody;
   end;
@@ -823,13 +823,13 @@ type
   TDLConditionalBranch = class(TDLNode)
   private
     FCondition: TDLCondition;
-    FStatements: TList<TDLStmt>;
+    FStatements: TObjectList<TDLStmt>;
   public
     constructor Create(ASpan: TDLSourceSpan; ACondition: TDLCondition);
     destructor Destroy; override;
     procedure Dump(ABuilder: TStringBuilder; AIndent: Integer); override;
     property Condition: TDLCondition read FCondition;
-    property Statements: TList<TDLStmt> read FStatements;
+    property Statements: TObjectList<TDLStmt> read FStatements;
   end;
 
   /// <summary>
@@ -838,12 +838,12 @@ type
   /// </summary>
   TDLConditionalStmt = class(TDLStmt)
   private
-    FBranches: TList<TDLConditionalBranch>;
+    FBranches: TObjectList<TDLConditionalBranch>;
   public
     constructor Create(ASpan: TDLSourceSpan);
     destructor Destroy; override;
     procedure Dump(ABuilder: TStringBuilder; AIndent: Integer); override;
-    property Branches: TList<TDLConditionalBranch> read FBranches;
+    property Branches: TObjectList<TDLConditionalBranch> read FBranches;
   end;
 
   // ---------------------------------------------------------------------------
@@ -904,27 +904,27 @@ type
   /// <summary>Set constructor.</summary>
   TDLSetExpr = class(TDLExpr)
   private
-    FElements: TList<TDLExpr>;
+    FElements: TObjectList<TDLExpr>;
     FIsRanges: TList<Boolean>;
   public
     function ToSourceText: string; override;
     constructor Create(ASpan: TDLSourceSpan);
     destructor Destroy; override;
     procedure Dump(ABuilder: TStringBuilder; AIndent: Integer); override;
-    property Elements: TList<TDLExpr> read FElements;
+    property Elements: TObjectList<TDLExpr> read FElements;
     property IsRanges: TList<Boolean> read FIsRanges;
   end;
 
   /// <summary>Array constructor.</summary>
   TDLArrayExpr = class(TDLExpr)
   private
-    FElements: TList<TDLExpr>;
+    FElements: TObjectList<TDLExpr>;
   public
     function ToSourceText: string; override;
     constructor Create(ASpan: TDLSourceSpan);
     destructor Destroy; override;
     procedure Dump(ABuilder: TStringBuilder; AIndent: Integer); override;
-    property Elements: TList<TDLExpr> read FElements;
+    property Elements: TObjectList<TDLExpr> read FElements;
   end;
 
   /// <summary>Binary expression.</summary>
@@ -967,28 +967,28 @@ type
   TDLIndexExpr = class(TDLExpr)
   private
     FTarget: TDLExpr;
-    FIndices: TList<TDLExpr>;
+    FIndices: TObjectList<TDLExpr>;
   public
     function ToSourceText: string; override;
     constructor Create(ASpan: TDLSourceSpan; ATarget: TDLExpr);
     destructor Destroy; override;
     procedure Dump(ABuilder: TStringBuilder; AIndent: Integer); override;
     property Target: TDLExpr read FTarget;
-    property Indices: TList<TDLExpr> read FIndices;
+    property Indices: TObjectList<TDLExpr> read FIndices;
   end;
 
   /// <summary>Call expression.</summary>
   TDLCallExpr = class(TDLExpr)
   private
     FCallee: TDLExpr;
-    FArgs: TList<TDLExpr>;
+    FArgs: TObjectList<TDLExpr>;
   public
     function ToSourceText: string; override;
     constructor Create(ASpan: TDLSourceSpan; ACallee: TDLExpr);
     destructor Destroy; override;
     procedure Dump(ABuilder: TStringBuilder; AIndent: Integer); override;
     property Callee: TDLExpr read FCallee;
-    property Args: TList<TDLExpr> read FArgs;
+    property Args: TObjectList<TDLExpr> read FArgs;
   end;
 
   /// <summary>Member access.</summary>
@@ -1036,7 +1036,7 @@ type
   TDLAnonMethodExpr = class(TDLExpr)
   private
     FKind: TDLProcKind;
-    FParams: TList<TDLParam>;
+    FParams: TObjectList<TDLParam>;
     FReturnType: string;
     FBody: TDLStmt;
   public
@@ -1045,7 +1045,7 @@ type
     destructor Destroy; override;
     procedure Dump(ABuilder: TStringBuilder; AIndent: Integer); override;
     property Kind: TDLProcKind read FKind;
-    property Params: TList<TDLParam> read FParams;
+    property Params: TObjectList<TDLParam> read FParams;
     property ReturnType: string read FReturnType write FReturnType;
     property Body: TDLStmt read FBody write FBody;
   end;
@@ -1098,10 +1098,10 @@ begin
   inherited Create(ASpan);
   FKind := AKind;
   FName := AName;
-  FUses := TList<TDLUse>.Create;
-  FDeclarations := TList<TDLDeclaration>.Create;
-  FInitStatements := TList<TDLStmt>.Create;
-  FFinalStatements := TList<TDLStmt>.Create;
+  FUses := TObjectList<TDLUse>.Create(True);
+  FDeclarations := TObjectList<TDLDeclaration>.Create(True);
+  FInitStatements := TObjectList<TDLStmt>.Create(True);
+  FFinalStatements := TObjectList<TDLStmt>.Create(True);
 end;
 
 destructor TDLModule.Destroy;
@@ -1192,7 +1192,7 @@ constructor TDLClassVar.Create(ASpan: TDLSourceSpan; AVisibility: TDLVisibility;
   AIsStrict: Boolean);
 begin
   inherited Create(ASpan, AVisibility, AIsStrict);
-  FFields := TList<TDLField>.Create;
+  FFields := TObjectList<TDLField>.Create(True);
 end;
 
 destructor TDLClassVar.Destroy;
@@ -1219,10 +1219,10 @@ begin
   FKind := AKind;
   FName := AName;
   FIsClass := AIsClass;
-  FParams := TList<TDLParam>.Create;
-  FBody := TList<TDLStmt>.Create;
+  FParams := TObjectList<TDLParam>.Create(True);
+  FBody := TObjectList<TDLStmt>.Create(True);
   FDirectives := TList<string>.Create;
-  FLocalDeclarations := TList<TDLDeclaration>.Create;
+  FLocalDeclarations := TObjectList<TDLDeclaration>.Create(True);
 end;
 
 destructor TDLMethod.Destroy;
@@ -1272,7 +1272,7 @@ constructor TDLProperty.Create(ASpan: TDLSourceSpan; const AName: string;
 begin
   inherited Create(ASpan, AVisibility, False);
   FName := AName;
-  FIndexParams := TList<TDLParam>.Create;
+  FIndexParams := TObjectList<TDLParam>.Create(True);
 end;
 
 destructor TDLProperty.Destroy;
@@ -1305,8 +1305,8 @@ constructor TDLVariantPart.Create(ASpan: TDLSourceSpan);
 begin
   inherited Create(ASpan);
   FLabels := TList<string>.Create;
-  FFields := TList<TDLField>.Create;
-  FSubVariants := TList<TDLVariantPart>.Create;
+  FFields := TObjectList<TDLField>.Create(True);
+  FSubVariants := TObjectList<TDLVariantPart>.Create(True);
 end;
 
 destructor TDLVariantPart.Destroy;
@@ -1484,7 +1484,7 @@ constructor TDLRecordTypeDef.Create(ASpan: TDLSourceSpan; AIsPacked: Boolean);
 begin
   inherited Create(ASpan);
   FIsPacked := AIsPacked;
-  FMembers := TList<TDLMember>.Create;
+  FMembers := TObjectList<TDLMember>.Create(True);
 end;
 
 destructor TDLRecordTypeDef.Destroy;
@@ -1514,7 +1514,7 @@ begin
   FKind := AKind;
   FAncestor := AAncestor;
   FInterfaces := TList<string>.Create;
-  FMembers := TList<TDLMember>.Create;
+  FMembers := TObjectList<TDLMember>.Create(True);
 end;
 
 destructor TDLClassTypeDef.Destroy;
@@ -1545,7 +1545,7 @@ begin
   FKind := AKind;
   FIsOfObject := AIsOfObject;
   FIsReferenceTo := AIsReferenceTo;
-  FParams := TList<TDLParam>.Create;
+  FParams := TObjectList<TDLParam>.Create(True);
 end;
 
 destructor TDLProceduralTypeDef.Destroy;
@@ -1705,10 +1705,10 @@ begin
   FKind := AKind;
   FName := AName;
   FIsClass := AIsClass;
-  FParams := TList<TDLParam>.Create;
-  FBody := TList<TDLStmt>.Create;
+  FParams := TObjectList<TDLParam>.Create(True);
+  FBody := TObjectList<TDLStmt>.Create(True);
   FDirectives := TList<string>.Create;
-  FLocalDeclarations := TList<TDLDeclaration>.Create;
+  FLocalDeclarations := TObjectList<TDLDeclaration>.Create(True);
 end;
 
 destructor TDLProcDecl.Destroy;
@@ -1768,7 +1768,7 @@ end;
 constructor TDLBlock.Create(ASpan: TDLSourceSpan);
 begin
   inherited Create(ASpan);
-  FStatements := TList<TDLStmt>.Create;
+  FStatements := TObjectList<TDLStmt>.Create(True);
 end;
 
 destructor TDLBlock.Destroy;
@@ -1823,7 +1823,7 @@ end;
 constructor TDLCaseSelector.Create(ASpan: TDLSourceSpan);
 begin
   inherited Create(ASpan);
-  FLabels := TList<TDLExpr>.Create;
+  FLabels := TObjectList<TDLExpr>.Create(True);
 end;
 
 destructor TDLCaseSelector.Destroy;
@@ -1850,7 +1850,7 @@ constructor TDLCaseStmt.Create(ASpan: TDLSourceSpan; ASubject: TDLExpr);
 begin
   inherited Create(ASpan);
   FSubject := ASubject;
-  FSelectors := TList<TDLCaseSelector>.Create;
+  FSelectors := TObjectList<TDLCaseSelector>.Create(True);
 end;
 
 destructor TDLCaseStmt.Destroy;
@@ -1956,7 +1956,7 @@ end;
 constructor TDLWithStmt.Create(ASpan: TDLSourceSpan);
 begin
   inherited Create(ASpan);
-  FExpressions := TList<TDLExpr>.Create;
+  FExpressions := TObjectList<TDLExpr>.Create(True);
 end;
 
 destructor TDLWithStmt.Destroy;
@@ -1982,7 +1982,7 @@ constructor TDLTryStmt.Create(ASpan: TDLSourceSpan; AIsExcept: Boolean);
 begin
   inherited Create(ASpan);
   FIsExcept := AIsExcept;
-  FHandlers := TList<TDLOnHandler>.Create;
+  FHandlers := TObjectList<TDLOnHandler>.Create(True);
 end;
 
 destructor TDLTryStmt.Destroy;
@@ -2224,7 +2224,7 @@ constructor TDLConditionalBranch.Create(ASpan: TDLSourceSpan;
 begin
   inherited Create(ASpan);
   FCondition := ACondition;
-  FStatements := TList<TDLStmt>.Create;
+  FStatements := TObjectList<TDLStmt>.Create(True);
 end;
 
 destructor TDLConditionalBranch.Destroy;
@@ -2251,7 +2251,7 @@ end;
 constructor TDLConditionalStmt.Create(ASpan: TDLSourceSpan);
 begin
   inherited Create(ASpan);
-  FBranches := TList<TDLConditionalBranch>.Create;
+  FBranches := TObjectList<TDLConditionalBranch>.Create(True);
 end;
 
 destructor TDLConditionalStmt.Destroy;
@@ -2276,7 +2276,7 @@ constructor TDLConditionalDeclBranch.Create(ASpan: TDLSourceSpan;
 begin
   inherited Create(ASpan);
   FCondition := ACondition;
-  FItems := TList<TDLDeclaration>.Create;
+  FItems := TObjectList<TDLDeclaration>.Create(True);
 end;
 
 destructor TDLConditionalDeclBranch.Destroy;
@@ -2304,7 +2304,7 @@ end;
 constructor TDLConditionalDeclGroup.Create(ASpan: TDLSourceSpan);
 begin
   inherited Create(ASpan);
-  FBranches := TList<TDLConditionalDeclBranch>.Create;
+  FBranches := TObjectList<TDLConditionalDeclBranch>.Create(True);
 end;
 
 destructor TDLConditionalDeclGroup.Destroy;
@@ -2376,7 +2376,7 @@ end;
 constructor TDLSetExpr.Create(ASpan: TDLSourceSpan);
 begin
   inherited Create(ASpan);
-  FElements := TList<TDLExpr>.Create;
+  FElements := TObjectList<TDLExpr>.Create(True);
   FIsRanges := TList<Boolean>.Create;
 end;
 
@@ -2405,7 +2405,7 @@ end;
 constructor TDLArrayExpr.Create(ASpan: TDLSourceSpan);
 begin
   inherited Create(ASpan);
-  FElements := TList<TDLExpr>.Create;
+  FElements := TObjectList<TDLExpr>.Create(True);
 end;
 
 destructor TDLArrayExpr.Destroy;
@@ -2478,7 +2478,7 @@ constructor TDLIndexExpr.Create(ASpan: TDLSourceSpan; ATarget: TDLExpr);
 begin
   inherited Create(ASpan);
   FTarget := ATarget;
-  FIndices := TList<TDLExpr>.Create;
+  FIndices := TObjectList<TDLExpr>.Create(True);
 end;
 
 destructor TDLIndexExpr.Destroy;
@@ -2504,7 +2504,7 @@ constructor TDLCallExpr.Create(ASpan: TDLSourceSpan; ACallee: TDLExpr);
 begin
   inherited Create(ASpan);
   FCallee := ACallee;
-  FArgs := TList<TDLExpr>.Create;
+  FArgs := TObjectList<TDLExpr>.Create(True);
 end;
 
 destructor TDLCallExpr.Destroy;
@@ -2596,7 +2596,7 @@ constructor TDLAnonMethodExpr.Create(ASpan: TDLSourceSpan; AKind: TDLProcKind);
 begin
   inherited Create(ASpan);
   FKind := AKind;
-  FParams := TList<TDLParam>.Create;
+  FParams := TObjectList<TDLParam>.Create(True);
 end;
 
 destructor TDLAnonMethodExpr.Destroy;
