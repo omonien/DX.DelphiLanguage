@@ -3226,7 +3226,7 @@ begin
              IsKeyword(kwType) or IsKeyword(kwConst) or IsKeyword(kwLabel)) and
             (HasConditionalStartTrivia or FDirectiveStmt)) or
           ((IsKeyword(kwProcedure) or IsKeyword(kwFunction)) and
-           (FDirectiveStmt or HasBareElseTrivia or
+           (HasBareElseTrivia or
             ((HasConditionalStartTrivia and (GetSpan.Start.Column > 1) and
               SectionLeadsToBody)))) or
            (IsMethodDirectiveStart and HasConditionalStartTrivia)) do
