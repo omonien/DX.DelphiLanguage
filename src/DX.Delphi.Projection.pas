@@ -79,6 +79,9 @@ begin
       // Rebuild the block with projected inner statements.
       LCompound := TDLCompoundStmt(LStmt);
       LNewCompound := TDLCompoundStmt.Create(LCompound.Span);
+      // The projected statements are references into the original CST (see
+      // the class contract); the rebuilt compound must not own them.
+      LNewCompound.Statements.OwnsObjects := False;
       LProjected := ProjectStatements(LCompound.Statements, ADefines);
       try
         LNewCompound.Statements.AddRange(LProjected);

@@ -1087,10 +1087,12 @@ begin
               TDLIdentifier.Create(LMethod.Name.Name, LMethod.Name.Span,
                 LMethod.Name.IsAmpersand), LMethod.ClassModifier);
             LImpl.Params.AddRange(LMethod.Params);
+            LMethod.Params.OwnsObjects := False; // transfer ownership to LImpl
             LMethod.Params.Clear;
             LImpl.ReturnType := LMethod.ReturnType;
             LMethod.ReturnType := nil;
             LImpl.Directives.AddRange(LMethod.Directives);
+            LMethod.Directives.OwnsObjects := False; // transfer ownership
             LMethod.Directives.Clear;
             LMethod.Free;
             Result := LImpl;
@@ -2058,14 +2060,14 @@ function TDLDelphiParser.ParseRecordHelper: TDLTypeExpr;
 var
   LStart: TDLSourceSpan;
   LHelperFor: TDLTypeExpr;
-  LMembers: TList<TDLMember>;
+  LMembers: TObjectList<TDLMember>;
 begin
   LStart := GetSpan;
   ExpectKeyword(kwRecord);
   ExpectKeyword(kwHelper);
   ExpectKeyword(kwFor);
   LHelperFor := ParseTypeExpr;
-  LMembers := TList<TDLMember>.Create;
+  LMembers := TObjectList<TDLMember>.Create(True);
   FCurrentVisibility := vsPublic;
   FCurrentStrict := False;
   while (GetKind <> tkEOF) and (not IsKeyword(kwEnd)) do
@@ -2167,7 +2169,7 @@ function TDLDelphiParser.ParseClassLike(AKind: TDLProgramKind): TDLTypeExpr;
 var
   LStart: TDLSourceSpan;
   LClass: TDLTypeExpr;
-  LMembers: TList<TDLMember>;
+  LMembers: TObjectList<TDLMember>;
   LIsSealed: Boolean;
   LIsAbstract: Boolean;
   LIsHelper: Boolean;
@@ -2258,7 +2260,7 @@ begin
       Advance;
     ExpectSymbol(']');
   end;
-  LMembers := TList<TDLMember>.Create;
+  LMembers := TObjectList<TDLMember>.Create(True);
   if (not LIsClassRef) and (not IsSymbol(';')) then
   begin
     FCurrentVisibility := vsPublished;
@@ -2794,10 +2796,12 @@ begin
       TDLIdentifier.Create(LName.Name, LName.Span, LName.IsAmpersand),
       AClassModifier);
     LImpl.Params.AddRange(LHeader.Params);
+    LHeader.Params.OwnsObjects := False; // transfer ownership to LImpl
     LHeader.Params.Clear;
     LImpl.ReturnType := LHeader.ReturnType;
     LHeader.ReturnType := nil;
     LImpl.Directives.AddRange(LHeader.Directives);
+    LHeader.Directives.OwnsObjects := False; // transfer ownership to LImpl
     LHeader.Directives.Clear;
     if LHeader.OperatorName <> nil then
       LImpl.OperatorName := TDLIdentifier.Create(LHeader.OperatorName.Name,
