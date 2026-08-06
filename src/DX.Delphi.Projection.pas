@@ -25,10 +25,17 @@ uses
   DX.Delphi.Conditions;
 
 type
+  /// <summary>A compound block rebuilt by the projection. Marked so callers
+  /// can dispose the wrapper nodes without touching the original CST.</summary>
+  TDLProjectedCompoundStmt = class(TDLCompoundStmt)
+  end;
+
   /// <summary>
   ///  Selects the active conditional branches for a define configuration.
   ///  The returned statements are references into the original CST (do not
-  ///  free them separately).
+  ///  free them separately); blocks that were rebuilt are TDLProjectedCompoundStmt
+  ///  instances that must be released via DisposeProjected before the list is
+  ///  freed.
   /// </summary>
   TDLTreeProjector = class
   public
@@ -41,6 +48,10 @@ type
     class function ProjectStatements(
       AStatements: TList<TDLStatement>;
       const ADefines: TDLDefineSet): TList<TDLStatement>;
+    /// <summary>Releases the wrapper nodes built by ProjectStatements.
+    /// Original CST references are left untouched. Call on the returned
+    /// list before freeing it.</summary>
+    class procedure DisposeProjected(AStatements: TList<TDLStatement>);
   end;
 
 implementation
@@ -78,7 +89,7 @@ begin
     begin
       // Rebuild the block with projected inner statements.
       LCompound := TDLCompoundStmt(LStmt);
-      LNewCompound := TDLCompoundStmt.Create(LCompound.Span);
+      LNewCompound := TDLProjectedCompoundStmt.Create(LCompound.Span);
       // The projected statements are references into the original CST (see
       // the class contract); the rebuilt compound must not own them.
       LNewCompound.Statements.OwnsObjects := False;
@@ -92,6 +103,19 @@ begin
     end
     else
       Result.Add(LStmt);
+end;
+
+class procedure TDLTreeProjector.DisposeProjected(
+  AStatements: TList<TDLStatement>);
+var
+  LStmt: TDLStatement;
+begin
+  for LStmt in AStatements do
+    if LStmt is TDLProjectedCompoundStmt then
+    begin
+      DisposeProjected(TDLProjectedCompoundStmt(LStmt).Statements);
+      LStmt.Free;
+    end;
 end;
 
 end.

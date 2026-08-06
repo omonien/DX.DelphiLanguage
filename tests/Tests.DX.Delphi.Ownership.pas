@@ -14,6 +14,7 @@ interface
 
 uses
   System.SysUtils,
+  System.Generics.Collections,
   DUnitX.TestFramework,
   DX.Delphi.Core,
   DX.Delphi.CST,
@@ -80,20 +81,41 @@ const
     'end;'#13#10+
     'end.';
 
-function RunParseBatch(AFreeTrees: Boolean; ACount: Integer;
-  ADiagnostics: TDLDiagnostics): Int64;
+/// <summary>Parses ACount trees and returns the heap growth in ADelta.
+/// When AFreeTrees is False the trees are retained until AFTER the delta is
+/// captured, then freed, so the baseline measurement does not leak memory
+/// into the rest of the test process.</summary>
+procedure RunParseBatch(AFreeTrees: Boolean; ACount: Integer;
+  ADiagnostics: TDLDiagnostics; out ADelta: Int64);
 var
+  LRetained: TObjectList<TDLCompilationUnit>;
   LUnit: TDLCompilationUnit;
+  LBefore: Int64;
   i: Integer;
 begin
-  Result := 0;
-  for i := 1 to ACount do
+  if AFreeTrees then
   begin
-    LUnit := ParseSource(COwnershipSource, ADiagnostics);
-    if AFreeTrees then
-      LUnit.Free
-    else
-      LUnit := nil; // deliberately leak: establishes the no-free baseline
+    LBefore := GetHeapStatus.TotalAllocated;
+    for i := 1 to ACount do
+    begin
+      LUnit := ParseSource(COwnershipSource, ADiagnostics);
+      LUnit.Free;
+    end;
+    ADelta := GetHeapStatus.TotalAllocated - LBefore;
+  end
+  else
+  begin
+    // Retain the trees so the no-free baseline can be measured, then release
+    // them so the test process stays clean.
+    LRetained := TObjectList<TDLCompilationUnit>.Create(True);
+    try
+      LBefore := GetHeapStatus.TotalAllocated;
+      for i := 1 to ACount do
+        LRetained.Add(ParseSource(COwnershipSource, ADiagnostics));
+      ADelta := GetHeapStatus.TotalAllocated - LBefore;
+    finally
+      LRetained.Free;
+    end;
   end;
 end;
 
@@ -101,19 +123,13 @@ procedure TTestTreeOwnership.FreeingTreesDoesNotLeak;
 var
   LDiagnostics: TDLDiagnostics;
   LFreeDelta, LNoFreeDelta: Int64;
-  LBefore: Int64;
 begin
   LDiagnostics := TDLDiagnostics.Create;
   try
     // Warm up allocator arenas so the measured deltas are steady-state.
-    RunParseBatch(True, 3, LDiagnostics);
-    LBefore := GetHeapStatus.TotalAllocated;
-    RunParseBatch(True, 20, LDiagnostics);
-    LFreeDelta := GetHeapStatus.TotalAllocated - LBefore;
-
-    LBefore := GetHeapStatus.TotalAllocated;
-    RunParseBatch(False, 20, LDiagnostics);
-    LNoFreeDelta := GetHeapStatus.TotalAllocated - LBefore;
+    RunParseBatch(True, 3, LDiagnostics, LFreeDelta);
+    RunParseBatch(True, 20, LDiagnostics, LFreeDelta);
+    RunParseBatch(False, 20, LDiagnostics, LNoFreeDelta);
 
     // Freeing 20 trees must reclaim the overwhelming majority of what not
     // freeing leaks; allow generous slack for allocator hysteresis.

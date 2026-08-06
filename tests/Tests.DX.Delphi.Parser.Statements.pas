@@ -558,6 +558,7 @@ begin
           Assert.IsTrue(LProjected[0] is TDLExprStmt);
           Assert.IsTrue(LProjected[1] is TDLExprStmt);
         finally
+          TDLTreeProjector.DisposeProjected(LProjected);
           LProjected.Free;
         end;
 
@@ -569,6 +570,7 @@ begin
         try
           Assert.AreEqual(2, LProjected.Count);
         finally
+          TDLTreeProjector.DisposeProjected(LProjected);
           LProjected.Free;
         end;
 
@@ -579,6 +581,7 @@ begin
         try
           Assert.AreEqual(2, LProjected.Count);
         finally
+          TDLTreeProjector.DisposeProjected(LProjected);
           LProjected.Free;
         end;
       finally
