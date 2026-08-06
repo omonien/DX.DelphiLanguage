@@ -14,15 +14,15 @@ The project consists of a library (`src/`) plus two console applications:
 
 | Path | Purpose |
 |---|---|
-| `src/DX.Delphi.Core.pas` | Shared vocabulary: tokens, keywords, source spans, diagnostics, symbol table, dump helpers |
-| `src/DX.Delphi.Lexer.pas` | Full tokenizer (Delphi 13.x surface, incl. multiline strings) |
-| `src/DX.Delphi.CST.pas` | Concrete syntax tree node hierarchy |
+| `src/DX.Delphi.Core.pas` | Shared vocabulary: tokens, keywords, source spans, diagnostics, symbol table, dump helpers, and the CST/AST declaration enums (single source of truth) |
+| `src/DX.Delphi.Lexer.pas` | Full tokenizer (Delphi 13.x surface, incl. multiline strings) + `TDLTriviaAnalyzer` (pure trivia/directive analysis) |
+| `src/DX.Delphi.CST.pas` | Concrete syntax tree node hierarchy (nodes own their children; rendering via `ToSourceText`) |
 | `src/DX.Delphi.Parser.pas` | Recursive-descent parser producing the CST |
 | `src/DX.Delphi.AST.pas` | Abstract syntax tree node hierarchy |
 | `src/DX.Delphi.AstBuilder.pas` | CST → AST lowering pass |
 | `DLDemo.dpr` | Console demo: dumps tokens, CST, AST, symbols, diagnostics |
 | `samples/Demo.pas` | Sample exercising the covered language surface |
-| `tests/` | DUnitX test project (187 tests, incl. real-world fixtures) |
+| `tests/` | DUnitX test project (197 tests: units, parser, AST lowering, rendering, ownership, real-world fixtures) |
 | `libs/DUnitX` | DUnitX test framework (Git submodule, test-only) |
 | `libs/spring4d` | Spring4D sources — **test fixture only, NOT a dependency** |
 
@@ -162,6 +162,12 @@ dcc32 -Q -CC -U"X:\DX.DelphiLanguage\src" -U"X:\DX.DelphiLanguage\libs\DUnitX\So
 DX.Delphi.Tests.exe
 ```
 
+> **Leak detection note:** DUnitX's default memory-leak monitor is a no-op,
+> so a green run says nothing about leaks by itself. The
+> `Tests.DX.Delphi.Ownership` fixture fills that gap: it parses and frees a
+> representative tree repeatedly and asserts, against a self-calibrating
+> no-free baseline, that the freed trees are actually reclaimed.
+
 ### IDE / MSBuild
 
 Open `DX.DelphiLanguage.groupproj` in the IDE (contains `DLDemo` and
@@ -277,6 +283,19 @@ codebases through the lexer/parser as a robustness and regression net:
   if the compiler is installed on the machine; the fixture skips gracefully
   otherwise.
 
+## Rendering and ownership tests
+
+Two additional fixtures lock in behaviour that regressions tend to break
+silently:
+
+- **`Tests.DX.Delphi.Rendering`** — the `ToSourceText` contract of every CST
+  and AST expression node (operators, calls, member/index access, `not`
+  spacing, string escaping with char-code literals, set/array ranges,
+  anonymous methods, nested generics).
+- **`Tests.DX.Delphi.Ownership`** — a heap-based smoke test verifying that
+  freeing a CST tree actually reclaims all its nodes (see the leak-detection
+  note in the Testing section).
+
 Current status (tracked by the fixtures):
 
 | Corpus | Files | Result |
@@ -382,7 +401,7 @@ parse time), a define configuration selects the active path on demand via
 
 | Step | Scope | Status |
 |---|---|---|
-| 1a | Conditional groups in **type** sections (`TDLConditionalGroup` in CST, `TDLConditionalDeclGroup` in AST) | done — 2 tests, 187/187 green at the time |
+| 1a | Conditional groups in **type** sections (`TDLConditionalGroup` in CST, `TDLConditionalDeclGroup` in AST) | done — 2 tests, 197/197 green at the time |
 | 1b | Conditional groups in **const/var** sections (generalised `ParseConditionalDeclGroup` with item-parser method pointer) | done — 2 tests |
 | 2 | Shared-`end` resolution: declarations/statements spanning conditional boundaries | **partly done** — member lists, assignment RHS, GUID attributes, conditional function bodies, and the recursion-depth leak from speculative generic lookahead are fixed; **5 RTL files still crash** with a depth crawl (see below) |
 | 3 | Formatter bridge: trivia/directive indentation + text re-generation from the branch tree | pending |
