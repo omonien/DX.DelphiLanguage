@@ -3986,6 +3986,7 @@ var
   LStart: TDLSourceSpan;
   LArgs: TList<TDLExpr>;
   LArg: TDLExpr;
+  LTypeArg: TDLTypeArg;
   LSavePos: Integer;
   LTypeArgs: TList<TDLTypeArg>;
   LOk: Boolean;
@@ -4077,7 +4078,15 @@ begin
         if not LOk then
         begin
           FPos := LSavePos;
-          LTypeArgs.Free;
+          if LTypeArgs <> nil then
+          begin
+            // Rollback: the speculative type-arg nodes are no longer
+            // referenced by any tree; free each node (and its owned type
+            // expression) before discarding the list wrapper.
+            for LTypeArg in LTypeArgs do
+              LTypeArg.Free;
+            LTypeArgs.Free;
+          end;
         end;
         Dec(FSuppressCount);
       end;
