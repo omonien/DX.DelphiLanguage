@@ -291,3 +291,84 @@ is the progress metric). The remaining diagnostics are the measured distance
 to the goal of parsing Spring4D and the Delphi RTL **100 % error-free**. That
 claim will be made in this README only once the diagnostic count reaches
 zero; it is currently work in progress.
+
+## Debugging the parser with rdbg
+
+[rdbg](https://sundaymorning.app/rdbg/) (installed at `C:\rdbg`) drives
+Delphi programs through the Windows debug API. The DX.Delphi build tools
+(`parseonly`, `parsebatch` in `/tmp/dl`) are ordinary Win32 console
+programs, so the **x86 daemon** is used:
+
+```bat
+C:\rdbg\bin\rdbgd32.exe --listen 127.0.0.1:5903 ^
+  --log-level info --log-file %LOCALAPPDATA%\rdbg\rdbgd32.log
+```
+
+The daemon must run in the interactive RDP desktop (Session 2+), not
+Session 0. Verify it is up:
+
+```bat
+C:\rdbg\bin\rdbgc.exe hello 127.0.0.1:5903
+```
+
+### Driving a session (working recipe)
+
+The MCP bridge (`rdbg-mcp.exe`) is unreliable here ("daemon not
+reachable" despite a running daemon); the **`rdbgc repl` line-JSON channel
+works**. Each stdin line is one JSON request; responses and pushed events
+come back on stdout (one JSON object per line). Set
+`RDBG_REPL_NO_SHUTDOWN=1` so EOF does not kill the daemon.
+
+```json
+{"method":"launch","params":{"exe":"C:\\...\\parseonly.exe",
+  "args":["C:\\...\\System.pas"]}}
+{"method":"continue","params":{}}
+{"method":"events","params":{"timeout_ms":15000}}
+{"method":"set_breakpoint","params":{"kind":"sw","address":"0x..."}}
+{"method":"get_registers","params":{}}
+{"method":"read_memory","params":{"address":"0x...","length":256}}
+```
+
+Confirmed method names (via `rdbgc repl`): `launch`, `continue`,
+`set_breakpoint`, `get_registers`, `read_memory`, `events`. The MCP tool
+names `get_registers`/`read_memory` are the daemon names too; `read`,
+`step_over`, `resume` etc. are **not** daemon methods.
+
+### Breakpoint addresses
+
+`set_breakpoint` takes the **absolute** address. The `.map` file lists
+`segment:offset` (e.g. `0001:00137028` for `ParseExpression`); compute
+`image_base + offset` — take `image_base` from the `create_process` event
+(it varies per launch, ASLR):
+
+```json
+{"event":"create_process","pid":...,"image_base":"0xCA0000",...}
+```
+
+Patching a raw RVA without the base fails with
+`VirtualProtectEx ... 487`. `kind` must be `"sw"` (software, INT3 patch) or
+`"hw"` (hardware, DR0–DR3); `"source"`/`"symbol"` are rejected.
+
+`dcc32 -GD` did **not** emit a `.map` in this setup, so symbol addresses
+were recovered from the PE instead: the guard strings are stored UTF-16 in
+`.text`; find the string's file offset, map it to an RVA via the PE
+section table, then scan `.text` for the 32-bit little-endian reference
+(`default_image_base 0x400000 + RVA`) — that code offset is the `raise`
+site (e.g. the `FStmtDepth > 200` guard inside `ParseExpression`).
+
+### Known pitfalls
+
+- **The parser does not crash under the debugger.** The recursion crawl is
+  triggered by heap-layout-dependent state (an uninitialized field value
+  that differs by process layout), so under a debugger the depth never
+  reaches the guard and the program exits cleanly. Breakpoints on the
+  guards therefore never fire in a debug session.
+- To still inspect a deep crawl, temporarily insert
+  `if FStmtDepth > 100 then asm int 3 end;` in `ParseStatement` — the
+  debugger stops at the INT3 (a `breakpoint_hit`) even though the crawl is
+  below the 200 guard. Remove the hook afterwards.
+- The crawl can be characterized without a debugger by a
+  depth-vs-progress guard (e.g. abort when `FStmtDepth` stays above 30 for
+  more than 5000 tokens); this located the System.pas crawl root at
+  `IsICUAvailable` and, combined with tightening the body-loop
+  function/procedure term, fixed the System.SysUtils crash.
