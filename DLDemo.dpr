@@ -24,6 +24,7 @@ uses
   System.Classes,
   System.Generics.Collections,
   DX.Delphi.Core,
+  DX.Delphi.SourceReader,
   DX.Delphi.Lexer,
   DX.Delphi.CST,
   DX.Delphi.Parser,
@@ -44,21 +45,9 @@ begin
 end;
 
 function ReadSource(const AFileName: string): string;
-var
-  LStream: TFileStream;
-  LReader: TStreamReader;
 begin
-  LStream := TFileStream.Create(AFileName, fmOpenRead or fmShareDenyNone);
-  try
-    LReader := TStreamReader.Create(LStream, TEncoding.UTF8, True);
-    try
-      Result := LReader.ReadToEnd;
-    finally
-      LReader.Free;
-    end;
-  finally
-    LStream.Free;
-  end;
+  // Encoding detection (UTF-8/UTF-16 BOM, ANSI fallback for legacy files).
+  Result := DLReadSourceText(AFileName);
 end;
 
 var

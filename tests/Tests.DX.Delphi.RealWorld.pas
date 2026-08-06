@@ -21,7 +21,8 @@ uses
   System.Classes,
   System.IOUtils,
   DUnitX.TestFramework,
-  DX.Delphi.Core;
+  DX.Delphi.Core,
+  DX.Delphi.SourceReader;
 
 type
   /// <summary>Result of parsing one source file.</summary>
@@ -60,12 +61,9 @@ var
   LDiagnostics: TDLDiagnostics;
 begin
   ACrashed := False;
-  Result := -1;
-  try
-    LSource := TFile.ReadAllText(AFileName, TEncoding.UTF8);
-  except
-    Exit;
-  end;
+  // The reader detects the encoding (UTF-8 with/without BOM, UTF-16, or the
+  // ANSI codepage of legacy Delphi files) instead of rejecting non-UTF-8.
+  LSource := DLReadSourceText(AFileName);
   LDiagnostics := TDLDiagnostics.Create;
   try
     try

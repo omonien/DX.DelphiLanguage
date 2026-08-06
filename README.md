@@ -20,6 +20,7 @@ The project consists of a library (`src/`) plus two console applications:
 | `src/DX.Delphi.Parser.pas` | Recursive-descent parser producing the CST |
 | `src/DX.Delphi.AST.pas` | Abstract syntax tree node hierarchy |
 | `src/DX.Delphi.AstBuilder.pas` | CST → AST lowering pass |
+| `src/DX.Delphi.SourceReader.pas` | Reads source files with encoding detection (UTF-8/UTF-16 BOM, ANSI fallback for legacy files) |
 | `DLDemo.dpr` | Console demo: dumps tokens, CST, AST, symbols, diagnostics |
 | `samples/Demo.pas` | Sample exercising the covered language surface |
 | `tests/` | DUnitX test project (197 tests: units, parser, AST lowering, rendering, ownership, real-world fixtures) |
@@ -436,8 +437,11 @@ The crashes shared two root causes, both fixed in the parser:
    diagnostics (down from 6934); `Winapi.Windows.pas` and
    `System.Generics.Defaults.pas` parse clean, `System.Skia.API.pas` has 1.
    Remaining targets: `System.Variants.pas` (143, one conditional body with
-   nested `{$IF}` functions), `System.AnsiStrings.pas` (117), the non-UTF8
-   read-fail files, and the Spring4D tops (`Spring.Comparers.pas` 77).
+   nested `{$IF}` functions), `System.AnsiStrings.pas` (117), and the
+   Spring4D tops (`Spring.Comparers.pas` 77). All 584 RTL files are now read
+   and parsed — legacy ANSI-encoded files (no UTF-8 BOM) are handled by
+   `DLReadSourceText`, which falls back to the ANSI codepage when strict
+   UTF-8 decoding fails.
 2. Implement the formatter bridge (step 3): document and test trivia /
    directive indentation and text re-generation from the branch tree.
 3. Re-measure the corpora and update this table after each step.

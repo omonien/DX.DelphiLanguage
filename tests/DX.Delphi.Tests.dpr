@@ -40,6 +40,7 @@ uses
   Tests.DX.Delphi.Trivia in 'Tests.DX.Delphi.Trivia.pas',
   Tests.DX.Delphi.Rendering in 'Tests.DX.Delphi.Rendering.pas',
   Tests.DX.Delphi.Ownership in 'Tests.DX.Delphi.Ownership.pas',
+  Tests.DX.Delphi.SourceReader in 'Tests.DX.Delphi.SourceReader.pas',
   Tests.DX.Delphi.RealWorld in 'Tests.DX.Delphi.RealWorld.pas',
   Tests.DX.Delphi.Samples in 'Tests.DX.Delphi.Samples.pas';
 
