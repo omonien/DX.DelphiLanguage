@@ -34,83 +34,11 @@ uses
   DX.Delphi.Conditions;
 
 type
-  /// <summary>Program kind of a compilation unit.</summary>
-  TDLProgramKind = (
-    pkProgram,
-    pkUnit,
-    pkLibrary,
-    pkPackage
-  );
-
-  /// <summary>Procedure/function kind.</summary>
-  TDLProcKind = (
-    prProcedure,
-    prFunction,
-    prConstructor,
-    prDestructor,
-    prOperator
-  );
-
   /// <summary>Class modifier on a method ('class' keyword).</summary>
   TDLClassModifier = (
     cmNone,
     cmClass,
     cmStaticClass
-  );
-
-  /// <summary>Parameter passing modifier.</summary>
-  TDLParamModifier = (
-    pmNone,
-    pmConst,
-    pmVar,
-    pmOut,
-    pmConstRef,
-    pmVarRef
-  );
-
-  /// <summary>Member visibility.</summary>
-  TDLVisibility = (
-    vsNone,
-    vsPrivate,
-    vsProtected,
-    vsPublic,
-    vsPublished,
-    vsAutomated
-  );
-
-  /// <summary>Binary operator classification.</summary>
-  TDLBinaryOp = (
-    boNone,
-    boAdd,        // +
-    boSubtract,   // -
-    boMultiply,   // *
-    boDivide,     // / (real division)
-    boDiv,        // div
-    boMod,        // mod
-    boAnd,        // and
-    boOr,         // or
-    boXor,        // xor
-    boShl,        // shl
-    boShr,        // shr
-    boAs,         // as
-    boIs,         // is
-    boIn,         // in
-    boEqual,      // =
-    boNotEqual,   // <>
-    boLess,       // <
-    boLessEqual,  // <=
-    boGreater,    // >
-    boGreaterEqual // >=
-  );
-
-  /// <summary>Unary operator classification.</summary>
-  TDLUnaryOp = (
-    uoNone,
-    uoPlus,       // unary +
-    uoMinus,      // unary -
-    uoNot,        // not
-    uoAddr,       // @
-    uoDeref       // ^ (postfix)
   );
 
   /// <summary>Lightweight copy of a significant token (identifier, literal).</summary>
@@ -1371,20 +1299,6 @@ var
   GDLNodeCount: Integer = 0;
   GDLContext: string = '';
 
-const
-  CProgramKindText: array[TDLProgramKind] of string = ('program', 'unit',
-    'library', 'package');
-  CProcKindText: array[TDLProcKind] of string = ('procedure', 'function',
-    'constructor', 'destructor', 'operator');
-  CParamModifierText: array[TDLParamModifier] of string = ('', 'const', 'var',
-    'out', 'const ref', 'var ref');
-  CVisibilityText: array[TDLVisibility] of string = ('', 'private',
-    'protected', 'public', 'published', 'automated');
-  CBinaryOpText: array[TDLBinaryOp] of string = ('', '+', '-', '*', '/', 'div',
-    'mod', 'and', 'or', 'xor', 'shl', 'shr', 'as', 'is', 'in', '=', '<>', '<',
-    '<=', '>', '>=');
-  CUnaryOpText: array[TDLUnaryOp] of string = ('', '+', '-', 'not', '@', '^');
-
 { TDLTokenRef }
 
 constructor TDLTokenRef.Create(AKind: TDLTokenKind; const AText: string;
@@ -1880,9 +1794,9 @@ var
   LText: string;
 begin
   if IsStrict then
-    LText := 'strict ' + CVisibilityText[FKind]
+    LText := 'strict ' + TDLVisibilityNames[FKind]
   else
-    LText := CVisibilityText[FKind];
+    LText := TDLVisibilityNames[FKind];
   inherited DumpHeader(ABuilder, AIndent, LText);
 end;
 
@@ -1916,7 +1830,7 @@ begin
     LNames := LNames + LName.Name;
   end;
   DumpHeader(ABuilder, AIndent, 'field %s [%s]', [LNames,
-    CVisibilityText[Visibility]]);
+    TDLVisibilityNames[Visibility]]);
   if FTypeExpr <> nil then
     FTypeExpr.Dump(ABuilder, AIndent + 1);
 end;
@@ -1953,7 +1867,7 @@ var
   LDirective: TDLDirective;
   LText: string;
 begin
-  LText := CProcKindText[FKind] + ' ' + FName.Name;
+  LText := TDLProcKindNames[FKind] + ' ' + FName.Name;
   if FClassModifier = cmClass then
     LText := 'class ' + LText
   else if FClassModifier = cmStaticClass then
@@ -2007,7 +1921,7 @@ var
   LKindText: string;
   LSuffix: string;
 begin
-  LKindText := CProcKindText[FKind];
+  LKindText := TDLProcKindNames[FKind];
   if FIsReferenceTo then
     LKindText := 'reference to ' + LKindText;
   if FIsOfObject then
@@ -2256,7 +2170,7 @@ begin
       LNames := LNames + ', ';
     LNames := LNames + LName.Name;
   end;
-  DumpHeader(ABuilder, AIndent, '%s %s', [CParamModifierText[FModifier], LNames]);
+  DumpHeader(ABuilder, AIndent, '%s %s', [TDLParamModifierNames[FModifier], LNames]);
   if FTypeExpr <> nil then
     FTypeExpr.Dump(ABuilder, AIndent + 1);
   if FDefaultValue <> nil then
@@ -2331,7 +2245,7 @@ var
   LUses: TDLUsesClause;
   LItem: TDLNode;
 begin
-  DumpHeader(ABuilder, AIndent, '%s %s', [CProgramKindText[FProgramKind],
+  DumpHeader(ABuilder, AIndent, '%s %s', [TDLProgramKindNames[FProgramKind],
     FName.Name]);
   for LUses in FUsesClauses do
     LUses.Dump(ABuilder, AIndent + 1);
@@ -3668,9 +3582,9 @@ var
   LParam: TDLParameter;
 begin
   if FIsReferenceTo then
-    DumpHeader(ABuilder, AIndent, 'reference to %s', [CProcKindText[FKind]])
+    DumpHeader(ABuilder, AIndent, 'reference to %s', [TDLProcKindNames[FKind]])
   else
-    DumpHeader(ABuilder, AIndent, 'anonymous %s', [CProcKindText[FKind]]);
+    DumpHeader(ABuilder, AIndent, 'anonymous %s', [TDLProcKindNames[FKind]]);
   for LParam in FParams do
     LParam.Dump(ABuilder, AIndent + 1);
   if FReturnType <> nil then

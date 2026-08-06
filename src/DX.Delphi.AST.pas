@@ -28,58 +28,6 @@ uses
   DX.Delphi.Conditions;
 
 type
-  /// <summary>Module kind.</summary>
-  TDLModuleKind = (
-    mkProgram,
-    mkUnit,
-    mkLibrary,
-    mkPackage
-  );
-
-  /// <summary>Procedure/function kind.</summary>
-  TDLProcKind = (
-    pkProcedure,
-    pkFunction,
-    pkConstructor,
-    pkDestructor,
-    pkOperator
-  );
-
-  /// <summary>Parameter passing mode.</summary>
-  TDLParamMode = (
-    pmDefault,
-    pmConst,
-    pmVar,
-    pmOut,
-    pmConstRef,
-    pmVarRef
-  );
-
-  /// <summary>Member visibility.</summary>
-  TDLVisibility = (
-    vsNone,
-    vsPrivate,
-    vsProtected,
-    vsPublic,
-    vsPublished,
-    vsAutomated
-  );
-
-  /// <summary>Binary operator.</summary>
-  TDLBinOp = (
-    boNone,
-    boAdd, boSubtract, boMultiply, boDivide, boDiv, boMod,
-    boAnd, boOr, boXor, boShl, boShr,
-    boAs, boIs, boIn,
-    boEq, boNeq, boLt, boLe, boGt, boGe
-  );
-
-  /// <summary>Unary operator.</summary>
-  TDLUnOp = (
-    uoNone,
-    uoPlus, uoMinus, uoNot, uoAddr, uoDeref
-  );
-
   TDLNode = class;
   TDLTypeDef = class;
   TDLStmt = class;
@@ -118,18 +66,18 @@ type
   /// <summary>A compilation module (program/unit/library/package).</summary>
   TDLModule = class abstract(TDLNode)
   private
-    FKind: TDLModuleKind;
+    FKind: TDLProgramKind;
     FName: string;
     FUses: TList<TDLUse>;
     FDeclarations: TList<TDLDeclaration>;
     FInitStatements: TList<TDLStmt>;
     FFinalStatements: TList<TDLStmt>;
   public
-    constructor Create(ASpan: TDLSourceSpan; AKind: TDLModuleKind;
+    constructor Create(ASpan: TDLSourceSpan; AKind: TDLProgramKind;
       const AName: string);
     destructor Destroy; override;
     procedure Dump(ABuilder: TStringBuilder; AIndent: Integer); override;
-    property Kind: TDLModuleKind read FKind;
+    property Kind: TDLProgramKind read FKind;
     property Name: string read FName;
     property UsedUnits: TList<TDLUse> read FUses;
     property Declarations: TList<TDLDeclaration> read FDeclarations;
@@ -482,15 +430,15 @@ type
   TDLParam = class(TDLNode)
   private
     FNames: TList<string>;
-    FMode: TDLParamMode;
+    FMode: TDLParamModifier;
     FTypeName: string;
     FDefault: TDLExpr;
   public
-    constructor Create(ASpan: TDLSourceSpan; AMode: TDLParamMode);
+    constructor Create(ASpan: TDLSourceSpan; AMode: TDLParamModifier);
     destructor Destroy; override;
     procedure Dump(ABuilder: TStringBuilder; AIndent: Integer); override;
     property Names: TList<string> read FNames;
-    property Mode: TDLParamMode read FMode;
+    property Mode: TDLParamModifier read FMode;
     property TypeName: string read FTypeName write FTypeName;
     property DefaultValue: TDLExpr read FDefault write FDefault;
   end;
@@ -972,16 +920,16 @@ type
   /// <summary>Binary expression.</summary>
   TDLBinaryExpr = class(TDLExpr)
   private
-    FOperator: TDLBinOp;
+    FOperator: TDLBinaryOp;
     FOperatorText: string;
     FLeft: TDLExpr;
     FRight: TDLExpr;
   public
-    constructor Create(ASpan: TDLSourceSpan; AOperator: TDLBinOp;
+    constructor Create(ASpan: TDLSourceSpan; AOperator: TDLBinaryOp;
       const AOperatorText: string; ALeft, ARight: TDLExpr);
     destructor Destroy; override;
     procedure Dump(ABuilder: TStringBuilder; AIndent: Integer); override;
-    property Operator: TDLBinOp read FOperator;
+    property Operator: TDLBinaryOp read FOperator;
     property OperatorText: string read FOperatorText;
     property Left: TDLExpr read FLeft;
     property Right: TDLExpr read FRight;
@@ -990,15 +938,15 @@ type
   /// <summary>Unary expression.</summary>
   TDLUnaryExpr = class(TDLExpr)
   private
-    FOperator: TDLUnOp;
+    FOperator: TDLUnaryOp;
     FOperatorText: string;
     FOperand: TDLExpr;
   public
-    constructor Create(ASpan: TDLSourceSpan; AOperator: TDLUnOp;
+    constructor Create(ASpan: TDLSourceSpan; AOperator: TDLUnaryOp;
       const AOperatorText: string; AOperand: TDLExpr);
     destructor Destroy; override;
     procedure Dump(ABuilder: TStringBuilder; AIndent: Integer); override;
-    property Operator: TDLUnOp read FOperator;
+    property Operator: TDLUnaryOp read FOperator;
     property OperatorText: string read FOperatorText;
     property Operand: TDLExpr read FOperand;
   end;
@@ -1087,13 +1035,13 @@ type
 implementation
 
 const
-  CModuleKindText: array[TDLModuleKind] of string = ('program', 'unit',
+  TDLProgramKindNames: array[TDLProgramKind] of string = ('program', 'unit',
     'library', 'package');
-  CProcKindText: array[TDLProcKind] of string = ('procedure', 'function',
+  TDLProcKindNames: array[TDLProcKind] of string = ('procedure', 'function',
     'constructor', 'destructor', 'operator');
-  CParamModeText: array[TDLParamMode] of string = ('', 'const', 'var', 'out',
+  TDLParamModifierNames: array[TDLParamModifier] of string = ('', 'const', 'var', 'out',
     'const ref', 'var ref');
-  CVisibilityText: array[TDLVisibility] of string = ('', 'private',
+  TDLVisibilityNames: array[TDLVisibility] of string = ('', 'private',
     'protected', 'public', 'published', 'automated');
 
 /// <summary>Renders an AST expression to compact source-like text.</summary>
@@ -1212,7 +1160,7 @@ end;
 
 { TDLModule }
 
-constructor TDLModule.Create(ASpan: TDLSourceSpan; AKind: TDLModuleKind;
+constructor TDLModule.Create(ASpan: TDLSourceSpan; AKind: TDLProgramKind;
   const AName: string);
 begin
   inherited Create(ASpan);
@@ -1239,7 +1187,7 @@ var
   LDecl: TDLDeclaration;
   LStmt: TDLStmt;
 begin
-  DumpHeader(ABuilder, AIndent, '%s %s', [CModuleKindText[FKind], FName]);
+  DumpHeader(ABuilder, AIndent, '%s %s', [TDLProgramKindNames[FKind], FName]);
   for LUse in FUses do
     LUse.Dump(ABuilder, AIndent + 1);
   for LDecl in FDeclarations do
@@ -1280,9 +1228,9 @@ end;
 procedure TDLVisibilitySection.Dump(ABuilder: TStringBuilder; AIndent: Integer);
 begin
   if IsStrict then
-    DumpHeader(ABuilder, AIndent, 'strict %s', [CVisibilityText[FKind]])
+    DumpHeader(ABuilder, AIndent, 'strict %s', [TDLVisibilityNames[FKind]])
   else
-    DumpHeader(ABuilder, AIndent, '%s', [CVisibilityText[FKind]]);
+    DumpHeader(ABuilder, AIndent, '%s', [TDLVisibilityNames[FKind]]);
 end;
 
 { TDLField }
@@ -1362,9 +1310,9 @@ var
   LDecl: TDLDeclaration;
 begin
   if FIsClass then
-    DumpHeader(ABuilder, AIndent, '%s %s (class)', [CProcKindText[FKind], FName])
+    DumpHeader(ABuilder, AIndent, '%s %s (class)', [TDLProcKindNames[FKind], FName])
   else
-    DumpHeader(ABuilder, AIndent, '%s %s', [CProcKindText[FKind], FName]);
+    DumpHeader(ABuilder, AIndent, '%s %s', [TDLProcKindNames[FKind], FName]);
   for LParam in FParams do
     LParam.Dump(ABuilder, AIndent + 1);
   if FReturnType <> '' then
@@ -1677,7 +1625,7 @@ procedure TDLProceduralTypeDef.Dump(ABuilder: TStringBuilder; AIndent: Integer);
 var
   LParam: TDLParam;
 begin
-  DumpHeader(ABuilder, AIndent, 'proc type %s%s', [CProcKindText[FKind],
+  DumpHeader(ABuilder, AIndent, 'proc type %s%s', [TDLProcKindNames[FKind],
     IfThen(FIsOfObject, ' of object', IfThen(FIsReferenceTo, ' reference to', ''))]);
   for LParam in FParams do
     LParam.Dump(ABuilder, AIndent + 1);
@@ -1710,7 +1658,7 @@ end;
 
 { TDLParam }
 
-constructor TDLParam.Create(ASpan: TDLSourceSpan; AMode: TDLParamMode);
+constructor TDLParam.Create(ASpan: TDLSourceSpan; AMode: TDLParamModifier);
 begin
   inherited Create(ASpan);
   FMode := AMode;
@@ -1727,7 +1675,7 @@ end;
 procedure TDLParam.Dump(ABuilder: TStringBuilder; AIndent: Integer);
 begin
   DumpHeader(ABuilder, AIndent, '%s %s : %s%s',
-    [CParamModeText[FMode], String.Join(', ', FNames.ToArray), FTypeName,
+    [TDLParamModifierNames[FMode], String.Join(', ', FNames.ToArray), FTypeName,
      IfThen(FDefault <> nil, ' = ' + DLExprText(FDefault), '')]);
 end;
 
@@ -1846,7 +1794,7 @@ var
   LDirective: string;
   LDecl: TDLDeclaration;
 begin
-  DumpHeader(ABuilder, AIndent, '%s %s', [CProcKindText[FKind], FName]);
+  DumpHeader(ABuilder, AIndent, '%s %s', [TDLProcKindNames[FKind], FName]);
   for LParam in FParams do
     LParam.Dump(ABuilder, AIndent + 1);
   if FReturnType <> '' then
@@ -2544,7 +2492,7 @@ end;
 
 { TDLBinaryExpr }
 
-constructor TDLBinaryExpr.Create(ASpan: TDLSourceSpan; AOperator: TDLBinOp;
+constructor TDLBinaryExpr.Create(ASpan: TDLSourceSpan; AOperator: TDLBinaryOp;
   const AOperatorText: string; ALeft, ARight: TDLExpr);
 begin
   inherited Create(ASpan);
@@ -2570,7 +2518,7 @@ end;
 
 { TDLUnaryExpr }
 
-constructor TDLUnaryExpr.Create(ASpan: TDLSourceSpan; AOperator: TDLUnOp;
+constructor TDLUnaryExpr.Create(ASpan: TDLSourceSpan; AOperator: TDLUnaryOp;
   const AOperatorText: string; AOperand: TDLExpr);
 begin
   inherited Create(ASpan);
@@ -2729,7 +2677,7 @@ procedure TDLAnonMethodExpr.Dump(ABuilder: TStringBuilder; AIndent: Integer);
 var
   LParam: TDLParam;
 begin
-  DumpHeader(ABuilder, AIndent, 'anon %s', [CProcKindText[FKind]]);
+  DumpHeader(ABuilder, AIndent, 'anon %s', [TDLProcKindNames[FKind]]);
   for LParam in FParams do
     LParam.Dump(ABuilder, AIndent + 1);
   if FReturnType <> '' then

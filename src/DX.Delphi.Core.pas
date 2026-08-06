@@ -109,6 +109,85 @@ type
     kwBreak, kwContinue, kwHelper, kwName, kwOn, kwOperator, kwRef, kwAt
   );
 
+  // ---------------------------------------------------------------------------
+  // Shared declaration enums — single source of truth for both trees.
+  // The CST and AST each used to declare their own copies of these enums
+  // (with different member names for the same ordinals), which forced
+  // Ord() casts and parallel display tables. They now live here once.
+  // ---------------------------------------------------------------------------
+
+  /// <summary>Program kind of a compilation unit (shared by CST and AST).</summary>
+  TDLProgramKind = (
+    pkProgram,
+    pkUnit,
+    pkLibrary,
+    pkPackage
+  );
+
+  /// <summary>Procedure/function kind (shared by CST and AST).</summary>
+  TDLProcKind = (
+    prProcedure,
+    prFunction,
+    prConstructor,
+    prDestructor,
+    prOperator
+  );
+
+  /// <summary>Parameter passing modifier (shared by CST and AST).</summary>
+  TDLParamModifier = (
+    pmNone,
+    pmConst,
+    pmVar,
+    pmOut,
+    pmConstRef,
+    pmVarRef
+  );
+
+  /// <summary>Member visibility (shared by CST and AST).</summary>
+  TDLVisibility = (
+    vsNone,
+    vsPrivate,
+    vsProtected,
+    vsPublic,
+    vsPublished,
+    vsAutomated
+  );
+
+  /// <summary>Binary operator classification (shared by CST and AST).</summary>
+  TDLBinaryOp = (
+    boNone,
+    boAdd,        // +
+    boSubtract,   // -
+    boMultiply,   // *
+    boDivide,     // / (real division)
+    boDiv,        // div
+    boMod,        // mod
+    boAnd,        // and
+    boOr,         // or
+    boXor,        // xor
+    boShl,        // shl
+    boShr,        // shr
+    boAs,         // as
+    boIs,         // is
+    boIn,         // in
+    boEqual,      // =
+    boNotEqual,   // <>
+    boLess,       // <
+    boLessEqual,  // <=
+    boGreater,    // >
+    boGreaterEqual // >=
+  );
+
+  /// <summary>Unary operator classification (shared by CST and AST).</summary>
+  TDLUnaryOp = (
+    uoNone,
+    uoPlus,       // unary +
+    uoMinus,      // unary -
+    uoNot,        // not
+    uoAddr,       // @
+    uoDeref       // ^ (postfix)
+  );
+
   /// <summary>Severity of a diagnostic message.</summary>
   TDLDiagnosticSeverity = (
     dsHint,
@@ -258,6 +337,22 @@ const
     'enum', 'const', 'resstr', 'var', 'threadvar', 'field', 'classvar',
     'property', 'param', 'proc', 'func', 'ctor', 'dtor', 'operator', 'label',
     'local', 'unknown');
+
+  /// <summary>Human-readable names for program kinds (for dumps/tools).</summary>
+  TDLProgramKindNames: array[TDLProgramKind] of string = ('program', 'unit',
+    'library', 'package');
+
+  /// <summary>Human-readable names for procedure kinds (for dumps/tools).</summary>
+  TDLProcKindNames: array[TDLProcKind] of string = ('procedure', 'function',
+    'constructor', 'destructor', 'operator');
+
+  /// <summary>Human-readable names for parameter modifiers (for dumps/tools).</summary>
+  TDLParamModifierNames: array[TDLParamModifier] of string = ('', 'const',
+    'var', 'out', 'const ref', 'var ref');
+
+  /// <summary>Human-readable names for member visibility (for dumps/tools).</summary>
+  TDLVisibilityNames: array[TDLVisibility] of string = ('', 'private',
+    'protected', 'public', 'published', 'automated');
 
 implementation
 

@@ -96,12 +96,6 @@ implementation
 uses
   System.Character;
 
-const
-  CTokenKindText: array[TDLTokenKind] of string = (
-    'eof', 'identifier', 'keyword', 'integer', 'float', 'string', 'charcode',
-    'symbol', 'whitespace', 'linecomment', 'blockcomment', 'directive',
-    'unknown');
-
 function BinToInt64(const ABits: string): Int64;
 var
   i: Integer;
