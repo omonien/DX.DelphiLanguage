@@ -35,7 +35,8 @@ uses
   System.SysUtils,
   System.Classes,
   System.Generics.Collections,
-  DX.Delphi.Core;
+  DX.Delphi.Core,
+  DX.Delphi.Conditions;
 
 type
   /// <summary>A single token produced by the lexer (trivia or real token).</summary>
@@ -89,6 +90,40 @@ type
     /// <summary>Tokenizes the whole source; caller owns the returned list.</summary>
     function Tokenize: TObjectList<TDLToken>;
     property Diagnostics: TDLDiagnostics read FDiagnostics;
+  end;
+
+  /// <summary>
+  ///  Pure analysis of the trivia attached to tokens: detects compiler
+  ///  directives and conditional-compilation branch markers. Used by the
+  ///  parser to model {$IFDEF}/{$ELSE}/{$ENDIF} groups structurally.
+  ///  All members are static and side-effect free.
+  /// </summary>
+  TDLTriviaAnalyzer = class
+  public
+    /// <summary>True when the token carries any compiler directive trivia.</summary>
+    class function HasDirective(AToken: TDLToken): Boolean;
+    /// <summary>True when the token's trivia OPENS a conditional branch
+    /// ({$IFDEF}, {$IFNDEF}, {$IF ...}, {$ELSE}, {$ELSEIF}).</summary>
+    class function HasConditionalStart(AToken: TDLToken): Boolean;
+    /// <summary>True only for {$ELSE}/{$ELSEIF} (continuation of the current
+    /// conditional chain), never for a fresh {$IFDEF}/{$IF}.</summary>
+    class function HasConditionalContinuation(AToken: TDLToken): Boolean;
+    /// <summary>True only for a bare {$ELSE} directive (not {$ELSEIF}).</summary>
+    class function HasBareElse(AToken: TDLToken): Boolean;
+    /// <summary>True when the token carries a branch directive of an ongoing
+    /// conditional chain ({$ELSE}/{$ELSEIF}/{$ENDIF}).</summary>
+    class function HasConditionalBranch(AToken: TDLToken): Boolean;
+    /// <summary>Returns the LAST (innermost) conditional directive of the
+    /// token's leading trivia; ACondition is nil for cdNone/cdEndIf.</summary>
+    class function LastConditionalDirective(AToken: TDLToken;
+      out ACondition: TDLCondition): TDLConditionDirectiveKind;
+    /// <summary>True when exactly one conditional directive is present on the
+    /// token (nested conditionals stack several directives onto one token).</summary>
+    class function SingleConditional(AToken: TDLToken): Boolean;
+    /// <summary>True when the statement sequence starting at AStart forms a
+    /// clean conditional group (a ';' at depth 0 precedes each branch marker).</summary>
+    class function CanStartConditionalGroup(ATokens: TObjectList<TDLToken>;
+      AStart: Integer; ADeclGroup: Boolean): Boolean;
   end;
 
 implementation
@@ -806,6 +841,256 @@ begin
   AddToken(tkEOF, GetCurrentPos);
   Result := FTokens;
   FTokens := nil; // transfer ownership to the caller
+end;
+
+{ TDLTriviaAnalyzer }
+
+class function TDLTriviaAnalyzer.HasDirective(AToken: TDLToken): Boolean;
+var
+  i: Integer;
+begin
+  Result := False;
+  for i := 0 to AToken.LeadingTrivia.Count - 1 do
+    if AToken.LeadingTrivia[i].Kind = trDirective then
+      Exit(True);
+end;
+
+class function TDLTriviaAnalyzer.HasConditionalStart(AToken: TDLToken): Boolean;
+var
+  i: Integer;
+  LText: string;
+begin
+  // True when a compiler directive in the leading trivia OPENS a conditional
+  // branch ({$IFDEF}, {$IFNDEF}, {$IF ...}, {$ELSE}, {$ELSEIF}). An {$ENDIF}
+  // closes a branch and must not trigger body/branch continuation handling.
+  Result := False;
+  for i := 0 to AToken.LeadingTrivia.Count - 1 do
+    if AToken.LeadingTrivia[i].Kind = trDirective then
+    begin
+      LText := LowerCase(Trim(AToken.LeadingTrivia[i].Text));
+      if (Pos('{$ifdef', LText) = 1) or (Pos('{$ifndef', LText) = 1) or
+         (Pos('{$if ', LText) = 1) or (Pos('{$if(', LText) = 1) or
+         (Pos('{$else', LText) = 1) then
+        Exit(True);
+    end;
+end;
+
+class function TDLTriviaAnalyzer.HasConditionalContinuation(
+  AToken: TDLToken): Boolean;
+var
+  i: Integer;
+  LText: string;
+begin
+  // True only for {$ELSE}/{$ELSEIF} directives (continuation of the CURRENT
+  // conditional branch chain), never for a fresh {$IFDEF}/{$IF}.
+  Result := False;
+  for i := 0 to AToken.LeadingTrivia.Count - 1 do
+    if AToken.LeadingTrivia[i].Kind = trDirective then
+    begin
+      LText := LowerCase(Trim(AToken.LeadingTrivia[i].Text));
+      if Pos('{$else', LText) = 1 then
+        Exit(True);
+    end;
+end;
+
+class function TDLTriviaAnalyzer.HasBareElse(AToken: TDLToken): Boolean;
+var
+  i: Integer;
+  LText: string;
+begin
+  // True only for a bare {$ELSE} directive (not {$ELSEIF}); the body-branch
+  // loop uses this so an {$ELSEIF} (outer chain, new declaration branch)
+  // stops it instead of swallowing the next function as a body branch.
+  Result := False;
+  for i := 0 to AToken.LeadingTrivia.Count - 1 do
+    if AToken.LeadingTrivia[i].Kind = trDirective then
+    begin
+      LText := LowerCase(Trim(AToken.LeadingTrivia[i].Text));
+      if (Pos('{$else', LText) = 1) and (Pos('{$elseif', LText) <> 1) then
+        Exit(True);
+    end;
+end;
+
+class function TDLTriviaAnalyzer.HasConditionalBranch(
+  AToken: TDLToken): Boolean;
+var
+  i: Integer;
+  LCond: TDLCondition;
+begin
+  // True when the current token carries a branch directive of an ongoing
+  // conditional chain ({$ELSE}/{$ELSEIF}/{$ENDIF}); used to detect
+  // shared-`end` constructs where a declaration spans a conditional
+  // boundary without a clean `;`-terminated group.
+  Result := False;
+  for i := 0 to AToken.LeadingTrivia.Count - 1 do
+    if AToken.LeadingTrivia[i].Kind = trDirective then
+    begin
+      LCond := nil;
+      if ClassifyDirective(AToken.LeadingTrivia[i].Text, LCond) in
+         [cdElseIf, cdElse, cdEndIf] then
+      begin
+        LCond.Free;
+        Exit(True);
+      end
+      else
+        LCond.Free;
+    end;
+end;
+
+class function TDLTriviaAnalyzer.LastConditionalDirective(
+  AToken: TDLToken; out ACondition: TDLCondition): TDLConditionDirectiveKind;
+var
+  i: Integer;
+  LKind: TDLConditionDirectiveKind;
+  LCond: TDLCondition;
+begin
+  // Examine the leading trivia of the current token and return the LAST
+  // conditional directive (the innermost / most recent one).
+  Result := cdNone;
+  ACondition := nil;
+  for i := 0 to AToken.LeadingTrivia.Count - 1 do
+    if AToken.LeadingTrivia[i].Kind = trDirective then
+    begin
+      LCond := nil;
+      LKind := ClassifyDirective(AToken.LeadingTrivia[i].Text, LCond);
+      if LKind <> cdNone then
+      begin
+        ACondition.Free;
+        ACondition := LCond;
+        Result := LKind;
+      end
+      else
+        LCond.Free;
+    end;
+end;
+
+class function TDLTriviaAnalyzer.SingleConditional(AToken: TDLToken): Boolean;
+var
+  i: Integer;
+  LCount: Integer;
+  LCond: TDLCondition;
+begin
+  // Nested conditionals stack several directives onto one token's trivia
+  // ({$IFDEF A}{$IFDEF B} stmt ...). The flat group model cannot represent
+  // that nesting, so only group when exactly one conditional directive is
+  // present on the current token.
+  LCount := 0;
+  for i := 0 to AToken.LeadingTrivia.Count - 1 do
+    if AToken.LeadingTrivia[i].Kind = trDirective then
+    begin
+      LCond := nil;
+      if ClassifyDirective(AToken.LeadingTrivia[i].Text, LCond) <> cdNone then
+        Inc(LCount);
+      LCond.Free;
+    end;
+  Result := LCount = 1;
+end;
+
+class function TDLTriviaAnalyzer.CanStartConditionalGroup(
+  ATokens: TObjectList<TDLToken>; AStart: Integer;
+  ADeclGroup: Boolean): Boolean;
+
+  function Peek(AAhead: Integer): TDLToken;
+  var
+    LIndex: Integer;
+  begin
+    LIndex := AStart + AAhead;
+    if LIndex < ATokens.Count then
+      Result := ATokens[LIndex]
+    else
+      Result := ATokens.Last;
+  end;
+
+var
+  i: Integer;
+  LParenDepth: Integer;
+  LStmtDepth: Integer;
+  LTok: TDLToken;
+  j: Integer;
+  LKind: TDLConditionDirectiveKind;
+  LCond: TDLCondition;
+begin
+  // A statement-level conditional group is created only when the first
+  // branch is a clean, complete statement sequence: a ';' at paren depth 0
+  // (and outside any open begin/case/repeat/try block) must immediately
+  // precede the next branch marker ({$ELSE}/{$ELSEIF}/{$ENDIF}). Otherwise
+  // the conditional lies inside a single statement (shared begin/end
+  // constructs) and normal parsing keeps the first path.
+  Result := False;
+  LParenDepth := 0;
+  LStmtDepth := 0;
+  i := 0;
+  while i < 100000 do
+  begin
+    LTok := Peek(i);
+    if LTok.Kind = tkEOF then
+      Exit(False);
+    if LTok.LeadingTrivia.Count > 0 then
+      for j := 0 to LTok.LeadingTrivia.Count - 1 do
+        if LTok.LeadingTrivia[j].Kind = trDirective then
+        begin
+          LCond := nil;
+          LKind := ClassifyDirective(LTok.LeadingTrivia[j].Text, LCond);
+          LCond.Free;
+          if (LKind = cdElseIf) or (LKind = cdElse) or (LKind = cdEndIf) then
+          begin
+            // The branch marker must follow a ';' at paren depth 0 and
+            // statement depth 0. For declaration groups (type sections) the
+            // first token of the next branch must also be an identifier (a
+            // declaration name), not a section keyword (const/var/type) which
+            // would belong to the enclosing scope; statement branches may
+            // start with any token (keywords like 'end', 'if', ...).
+            if (i = 0) or (LParenDepth <> 0) or (LStmtDepth <> 0) or
+               (Peek(i - 1).Kind <> tkSymbol) or
+               (Peek(i - 1).Text <> ';') or
+               (ADeclGroup and (LKind <> cdEndIf) and
+                (Peek(i).Kind <> tkIdentifier)) then
+              Exit(False);
+            if LKind = cdEndIf then
+            begin
+              Result := True;
+              Exit;
+            end;
+            // { $ELSE}/{$ELSEIF}: keep scanning; a section keyword inside a
+            // later branch (e.g. {$ELSE} ... const ... {$ENDIF}) invalidates
+            // the whole group.
+          end
+          else if (LKind = cdStart) and (i > 0) then
+            // A nested conditional opening inside the scanned range (before
+            // this group's own {$ENDIF}) means a branch contains another
+            // conditional group: the flat model cannot represent it, so fall
+            // back to normal parsing.
+            Exit(False);
+        end;
+    if LTok.Kind = tkKeyword then
+    begin
+      if (LTok.Text = 'begin') or (LTok.Text = 'case') or
+         (LTok.Text = 'repeat') or (LTok.Text = 'try') or
+         (LTok.Text = 'record') or (LTok.Text = 'class') or
+         (LTok.Text = 'interface') or (LTok.Text = 'object') or
+         (LTok.Text = 'dispinterface') then
+        Inc(LStmtDepth)
+      else if (LTok.Text = 'end') or (LTok.Text = 'until') then
+        Dec(LStmtDepth);
+    end
+    else if LTok.Kind = tkSymbol then
+      if LTok.Text = '(' then
+        Inc(LParenDepth)
+      else if LTok.Text = ')' then
+        Dec(LParenDepth);
+    // A section keyword directly after a ';' at depth 0 means the conditional
+    // encloses more than a bare declaration (e.g. a type followed by a const
+    // section): do not treat it as a declaration group.
+    if (LParenDepth = 0) and (LStmtDepth = 0) and (LTok.Kind = tkKeyword) and
+       (i > 0) and (Peek(i - 1).Kind = tkSymbol) and
+       (Peek(i - 1).Text = ';') and
+       ((LTok.Text = 'const') or (LTok.Text = 'var') or
+        (LTok.Text = 'type') or (LTok.Text = 'end') or
+        (LTok.Text = 'begin') or (LTok.Text = 'implementation') or
+        (LTok.Text = 'initialization') or (LTok.Text = 'finalization')) then
+      Exit(False);
+    Inc(i);
+  end;
 end;
 
 end.

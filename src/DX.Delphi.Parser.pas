@@ -84,16 +84,7 @@ type
     function TakeTrivia(AToken: TDLToken; ANode: TDLNode): TDLNode;
     procedure TakeLeadingTrivia(ANode: TDLNode);
     function TakeTriviaCopy: TList<TDLTrivia>;
-    function HasDirectiveTrivia: Boolean;
-    function HasConditionalStartTrivia: Boolean;
-    function HasConditionalContinuationTrivia: Boolean;
-    function HasBareElseTrivia: Boolean;
-    function HasConditionalBranchTrivia: Boolean;
     procedure SkipConditionalBranchesToEndIf;
-    function LastConditionalDirective(out ACondition: TDLCondition)
-      : TDLConditionDirectiveKind;
-    function CanStartConditionalGroup(ADeclGroup: Boolean): Boolean;
-    function SingleConditionalInTrivia: Boolean;
     function ParseConditionalStatementGroup: TDLConditionalStmt;
     function ParseConditionalDeclGroup(
       AItemParser: TDLDeclItemParser): TDLConditionalGroup;
@@ -405,53 +396,6 @@ begin
     Result.Add(GetCur.LeadingTrivia[i]);
 end;
 
-function TDLDelphiParser.HasDirectiveTrivia: Boolean;
-var
-  i: Integer;
-begin
-  Result := False;
-  for i := 0 to GetCur.LeadingTrivia.Count - 1 do
-    if GetCur.LeadingTrivia[i].Kind = trDirective then
-      Exit(True);
-end;
-
-function TDLDelphiParser.HasConditionalStartTrivia: Boolean;
-var
-  i: Integer;
-  LText: string;
-begin
-  // True when a compiler directive in the leading trivia OPENS a conditional
-  // branch ({$IFDEF}, {$IFNDEF}, {$IF ...}, {$ELSE}, {$ELSEIF}). An {$ENDIF}
-  // closes a branch and must not trigger body/branch continuation handling.
-  Result := False;
-  for i := 0 to GetCur.LeadingTrivia.Count - 1 do
-    if GetCur.LeadingTrivia[i].Kind = trDirective then
-    begin
-      LText := LowerCase(Trim(GetCur.LeadingTrivia[i].Text));
-      if (Pos('{$ifdef', LText) = 1) or (Pos('{$ifndef', LText) = 1) or
-         (Pos('{$if ', LText) = 1) or (Pos('{$if(', LText) = 1) or
-         (Pos('{$else', LText) = 1) then
-        Exit(True);
-    end;
-end;
-
-function TDLDelphiParser.HasConditionalContinuationTrivia: Boolean;
-var
-  i: Integer;
-  LText: string;
-begin
-  // True only for {$ELSE}/{$ELSEIF} directives (continuation of the CURRENT
-  // conditional branch chain), never for a fresh {$IFDEF}/{$IF}.
-  Result := False;
-  for i := 0 to GetCur.LeadingTrivia.Count - 1 do
-    if GetCur.LeadingTrivia[i].Kind = trDirective then
-    begin
-      LText := LowerCase(Trim(GetCur.LeadingTrivia[i].Text));
-      if Pos('{$else', LText) = 1 then
-        Exit(True);
-    end;
-end;
-
 function TDLDelphiParser.IsQualifiedFollowedByDotDot: Boolean;
 var
   LIndex: Integer;
@@ -485,76 +429,6 @@ begin
     end;
   end;
   Result := (Peek(LIndex).Kind = tkSymbol) and (Peek(LIndex).Text = '..');
-end;
-
-function TDLDelphiParser.LastConditionalDirective(
-  out ACondition: TDLCondition): TDLConditionDirectiveKind;
-var
-  i: Integer;
-  LKind: TDLConditionDirectiveKind;
-  LCond: TDLCondition;
-begin
-  // Examine the leading trivia of the current token and return the LAST
-  // conditional directive (the innermost / most recent one).
-  Result := cdNone;
-  ACondition := nil;
-  for i := 0 to GetCur.LeadingTrivia.Count - 1 do
-    if GetCur.LeadingTrivia[i].Kind = trDirective then
-    begin
-      LCond := nil;
-      LKind := ClassifyDirective(GetCur.LeadingTrivia[i].Text, LCond);
-      if LKind <> cdNone then
-      begin
-        ACondition.Free;
-        ACondition := LCond;
-        Result := LKind;
-      end
-      else
-        LCond.Free;
-    end;
-end;
-
-function TDLDelphiParser.HasBareElseTrivia: Boolean;
-var
-  i: Integer;
-  LText: string;
-begin
-  // True only for a bare {$ELSE} directive (not {$ELSEIF}); the body-branch
-  // loop uses this so an {$ELSEIF} (outer chain, new declaration branch)
-  // stops it instead of swallowing the next function as a body branch.
-  Result := False;
-  for i := 0 to GetCur.LeadingTrivia.Count - 1 do
-    if GetCur.LeadingTrivia[i].Kind = trDirective then
-    begin
-      LText := LowerCase(Trim(GetCur.LeadingTrivia[i].Text));
-      if (Pos('{$else', LText) = 1) and (Pos('{$elseif', LText) <> 1) then
-        Exit(True);
-    end;
-end;
-
-function TDLDelphiParser.HasConditionalBranchTrivia: Boolean;
-var
-  i: Integer;
-  LCond: TDLCondition;
-begin
-  // True when the current token carries a branch directive of an ongoing
-  // conditional chain ({$ELSE}/{$ELSEIF}/{$ENDIF}); used to detect
-  // shared-`end` constructs where a declaration spans a conditional
-  // boundary without a clean `;`-terminated group.
-  Result := False;
-  for i := 0 to GetCur.LeadingTrivia.Count - 1 do
-    if GetCur.LeadingTrivia[i].Kind = trDirective then
-    begin
-      LCond := nil;
-      if ClassifyDirective(GetCur.LeadingTrivia[i].Text, LCond) in
-         [cdElseIf, cdElse, cdEndIf] then
-      begin
-        LCond.Free;
-        Exit(True);
-      end
-      else
-        LCond.Free;
-    end;
 end;
 
 procedure TDLDelphiParser.SkipConditionalBranchesToEndIf;
@@ -616,121 +490,6 @@ begin
   end;
 end;
 
-function TDLDelphiParser.CanStartConditionalGroup(ADeclGroup: Boolean): Boolean;
-var
-  i: Integer;
-  LParenDepth: Integer;
-  LStmtDepth: Integer;
-  LTok: TDLToken;
-  j: Integer;
-  LKind: TDLConditionDirectiveKind;
-  LCond: TDLCondition;
-begin
-  // A statement-level conditional group is created only when the first
-  // branch is a clean, complete statement sequence: a ';' at paren depth 0
-  // (and outside any open begin/case/repeat/try block) must immediately
-  // precede the next branch marker ({$ELSE}/{$ELSEIF}/{$ENDIF}). Otherwise
-  // the conditional lies inside a single statement (shared begin/end
-  // constructs) and normal parsing keeps the first path.
-  Result := False;
-  LParenDepth := 0;
-  LStmtDepth := 0;
-  i := 0;
-  while i < 100000 do
-  begin
-    LTok := Peek(i);
-    if LTok.Kind = tkEOF then
-      Exit(False);
-    if LTok.LeadingTrivia.Count > 0 then
-      for j := 0 to LTok.LeadingTrivia.Count - 1 do
-        if LTok.LeadingTrivia[j].Kind = trDirective then
-        begin
-          LCond := nil;
-          LKind := ClassifyDirective(LTok.LeadingTrivia[j].Text, LCond);
-          LCond.Free;
-          if (LKind = cdElseIf) or (LKind = cdElse) or (LKind = cdEndIf) then
-          begin
-            // The branch marker must follow a ';' at paren depth 0 and
-            // statement depth 0. For declaration groups (type sections) the
-            // first token of the next branch must also be an identifier (a
-            // declaration name), not a section keyword (const/var/type) which
-            // would belong to the enclosing scope; statement branches may
-            // start with any token (keywords like 'end', 'if', ...).
-            if (i = 0) or (LParenDepth <> 0) or (LStmtDepth <> 0) or
-               (Peek(i - 1).Kind <> tkSymbol) or
-               (Peek(i - 1).Text <> ';') or
-               (ADeclGroup and (LKind <> cdEndIf) and
-                (Peek(i).Kind <> tkIdentifier)) then
-              Exit(False);
-            if LKind = cdEndIf then
-            begin
-              Result := True;
-              Exit;
-            end;
-            // { $ELSE}/{$ELSEIF}: keep scanning; a section keyword inside a
-            // later branch (e.g. {$ELSE} ... const ... {$ENDIF}) invalidates
-            // the whole group.
-          end
-          else if (LKind = cdStart) and (i > 0) then
-            // A nested conditional opening inside the scanned range (before
-            // this group's own {$ENDIF}) means a branch contains another
-            // conditional group: the flat model cannot represent it, so fall
-            // back to normal parsing.
-            Exit(False);
-        end;
-    if LTok.Kind = tkKeyword then
-    begin
-      if (LTok.Text = 'begin') or (LTok.Text = 'case') or
-         (LTok.Text = 'repeat') or (LTok.Text = 'try') or
-         (LTok.Text = 'record') or (LTok.Text = 'class') or
-         (LTok.Text = 'interface') or (LTok.Text = 'object') or
-         (LTok.Text = 'dispinterface') then
-        Inc(LStmtDepth)
-      else if (LTok.Text = 'end') or (LTok.Text = 'until') then
-        Dec(LStmtDepth);
-    end
-    else if LTok.Kind = tkSymbol then
-      if LTok.Text = '(' then
-        Inc(LParenDepth)
-      else if LTok.Text = ')' then
-        Dec(LParenDepth);
-    // A section keyword directly after a ';' at depth 0 means the conditional
-    // encloses more than a bare declaration (e.g. a type followed by a const
-    // section): do not treat it as a declaration group.
-    if (LParenDepth = 0) and (LStmtDepth = 0) and (LTok.Kind = tkKeyword) and
-       (i > 0) and (Peek(i - 1).Kind = tkSymbol) and
-       (Peek(i - 1).Text = ';') and
-       ((LTok.Text = 'const') or (LTok.Text = 'var') or
-        (LTok.Text = 'type') or (LTok.Text = 'end') or
-        (LTok.Text = 'begin') or (LTok.Text = 'implementation') or
-        (LTok.Text = 'initialization') or (LTok.Text = 'finalization')) then
-      Exit(False);
-    Inc(i);
-  end;
-end;
-
-function TDLDelphiParser.SingleConditionalInTrivia: Boolean;
-var
-  i: Integer;
-  LCount: Integer;
-  LCond: TDLCondition;
-begin
-  // Nested conditionals stack several directives onto one token's trivia
-  // ({$IFDEF A}{$IFDEF B} stmt ...). The flat group model cannot represent
-  // that nesting, so only group when exactly one conditional directive is
-  // present on the current token.
-  LCount := 0;
-  for i := 0 to GetCur.LeadingTrivia.Count - 1 do
-    if GetCur.LeadingTrivia[i].Kind = trDirective then
-    begin
-      LCond := nil;
-      if ClassifyDirective(GetCur.LeadingTrivia[i].Text, LCond) <> cdNone then
-        Inc(LCount);
-      LCond.Free;
-    end;
-  Result := LCount = 1;
-end;
-
 function TDLDelphiParser.ParseConditionalStatementGroup: TDLConditionalStmt;
 var
   LGroup: TDLConditionalStmt;
@@ -746,7 +505,7 @@ begin
   Inc(FConditionalDepth);
   LGroup := TDLConditionalStmt.Create(GetSpan);
   LCond := nil;
-  LastConditionalDirective(LCond);
+  TDLTriviaAnalyzer.LastConditionalDirective(GetCur, LCond);
   LBranch := TDLConditionalBranch.Create(GetSpan, LCond);
   LGroup.Branches.Add(LBranch);
   LSkipCheck := True; // the opening directive belongs to this group
@@ -767,7 +526,7 @@ begin
     LDir := cdNone;
     LCond := nil;
     if not LSkipCheck then
-      LDir := LastConditionalDirective(LCond);
+      LDir := TDLTriviaAnalyzer.LastConditionalDirective(GetCur, LCond);
     LSkipCheck := False;
     if LDir = cdEndIf then
     begin
@@ -784,7 +543,7 @@ begin
       Continue;
     end;
     LCond.Free;
-    if (LDir = cdStart) and CanStartConditionalGroup(False) then
+    if (LDir = cdStart) and TDLTriviaAnalyzer.CanStartConditionalGroup(FTokens, FPos, False) then
       LStatement := ParseConditionalStatementGroup // nested group
     else if LDir = cdStart then
       LStatement := ParseStatement // conditional inside a single statement
@@ -818,7 +577,7 @@ begin
   // branch per path. AItemParser parses one declaration of the section kind.
   LGroup := TDLConditionalGroup.Create(GetSpan);
   LCond := nil;
-  LastConditionalDirective(LCond);
+  TDLTriviaAnalyzer.LastConditionalDirective(GetCur, LCond);
   LBranch := TDLConditionalDeclBranch.Create(GetSpan, LCond);
   LGroup.Branches.Add(LBranch);
   LSkipCheck := True; // the opening directive belongs to this group
@@ -922,7 +681,7 @@ begin
   // An expression may continue over conditional-compilation branches:
   //   X := A
   // {$IFDEF Y} or B; {$ELSE} or C; {$ENDIF}
-  while HasConditionalStartTrivia and
+  while TDLTriviaAnalyzer.HasConditionalStart(GetCur) and
         (IsKeyword(kwOr) or IsKeyword(kwAnd) or IsKeyword(kwXor) or
          IsKeyword(kwDiv) or IsKeyword(kwMod) or IsKeyword(kwShl) or
          IsKeyword(kwShr) or IsSymbol('+') or IsSymbol('-') or
@@ -1163,7 +922,7 @@ begin
       //   function F(...); {$IFDEF X} begin ... end; {$ELSE} asm ... end;
       //   {$ENDIF}) are skipped so parsing resumes cleanly after the
       // matching {$ENDIF}.
-      if HasConditionalBranchTrivia then
+      if TDLTriviaAnalyzer.HasConditionalBranch(GetCur) then
         SkipConditionalBranchesToEndIf;
       if (FPos = LPrevPos) and (LItem = nil) then
         Advance; // resynchronise
@@ -1237,7 +996,7 @@ begin
   end;
   ExpectSemicolon;
   // Alternate conditional uses branches:  uses A; {$ELSE} uses B; {$ENDIF}
-  while HasConditionalStartTrivia do
+  while TDLTriviaAnalyzer.HasConditionalStart(GetCur) do
   begin
     while (GetKind <> tkEOF) and (not IsSymbol(';')) and
           not (IsKeyword(kwImplementation) or IsKeyword(kwInterface) or
@@ -1362,7 +1121,7 @@ begin
   ExpectKeyword(kwType);
   while GetKind <> tkEOF do
   begin
-    LPrevPos := FPos;    if HasConditionalStartTrivia then
+    LPrevPos := FPos;    if TDLTriviaAnalyzer.HasConditionalStart(GetCur) then
       LSawConditional := True;
     if IsSymbol('[') then
     begin
@@ -1372,8 +1131,8 @@ begin
     if (GetKind = tkIdentifier) or IsSoftNameKeyword then
     begin
       // A clean conditional group: {$IFDEF X} A = ...; {$ELSE} B = ...; {$ENDIF}
-      if HasConditionalStartTrivia and CanStartConditionalGroup(True) and
-         SingleConditionalInTrivia then
+      if TDLTriviaAnalyzer.HasConditionalStart(GetCur) and TDLTriviaAnalyzer.CanStartConditionalGroup(FTokens, FPos, True) and
+         TDLTriviaAnalyzer.SingleConditional(GetCur) then
         LSection.Items.Add(ParseConditionalDeclGroup(ParseTypeDeclNode))
       else if LSawConditional and IsSymbolAhead('=', 1) and
          not ((Peek(2).Kind = tkInteger) and
@@ -1517,7 +1276,7 @@ begin
     LPrevPos := FPos;
     // An alternate conditional branch may contain a type declaration
     // instead of a const:  const X = 1; {$ELSEIF Y} type T = record ...;
-    if (IsIdentifier or IsSoftNameKeyword) and HasConditionalStartTrivia and
+    if (IsIdentifier or IsSoftNameKeyword) and TDLTriviaAnalyzer.HasConditionalStart(GetCur) and
        IsSymbolAhead('=', 1) and (Peek(2).Kind = tkKeyword) and
        ((Peek(2).Text = 'record') or (Peek(2).Text = 'class') or
         (Peek(2).Text = 'interface') or (Peek(2).Text = 'dispinterface') or
@@ -1526,8 +1285,8 @@ begin
     if (GetKind = tkIdentifier) or IsSoftNameKeyword then
     begin
       // A clean conditional group: {$IFDEF X} A = ...; {$ELSE} A = ...; {$ENDIF}
-      if HasConditionalStartTrivia and CanStartConditionalGroup(True) and
-         SingleConditionalInTrivia then
+      if TDLTriviaAnalyzer.HasConditionalStart(GetCur) and TDLTriviaAnalyzer.CanStartConditionalGroup(FTokens, FPos, True) and
+         TDLTriviaAnalyzer.SingleConditional(GetCur) then
         LSection.Items.Add(ParseConditionalDeclGroup(ParseConstDeclNode))
       else
         LSection.Items.Add(ParseConstDecl);
@@ -1541,8 +1300,8 @@ begin
     // A clean declaration group ({$IFDEF X} B = ...; {$ELSE} B = ...;
     // {$ENDIF}) is handled by the outer loop as a structural group; do not
     // skip its branches here.
-    while HasConditionalStartTrivia and
-          not (CanStartConditionalGroup(True) and SingleConditionalInTrivia) and
+    while TDLTriviaAnalyzer.HasConditionalStart(GetCur) and
+          not (TDLTriviaAnalyzer.CanStartConditionalGroup(FTokens, FPos, True) and TDLTriviaAnalyzer.SingleConditional(GetCur)) and
           ((GetKind in [tkString, tkInteger, tkFloat, tkCharCode]) or
            IsIdentifier or IsSymbol('[')) do
     begin
@@ -1632,7 +1391,7 @@ begin
       LDecl.Value := ParseExpression;
     // A const value may be split by conditional compilation:
     //   X = {$IFDEF A}1{$ELSE}2{$ENDIF};
-    while HasConditionalStartTrivia and
+    while TDLTriviaAnalyzer.HasConditionalStart(GetCur) and
           ((GetKind in [tkString, tkInteger, tkFloat, tkCharCode]) or
            IsIdentifier or IsSymbol('[')) do
     begin
@@ -1696,8 +1455,8 @@ begin
     begin
       // A clean conditional group:
       //   {$IFDEF X} A: T; {$ELSE} A: U; {$ENDIF}
-      if HasConditionalStartTrivia and CanStartConditionalGroup(True) and
-         SingleConditionalInTrivia then
+      if TDLTriviaAnalyzer.HasConditionalStart(GetCur) and TDLTriviaAnalyzer.CanStartConditionalGroup(FTokens, FPos, True) and
+         TDLTriviaAnalyzer.SingleConditional(GetCur) then
         LSection.Items.Add(ParseConditionalDeclGroup(ParseVarDeclNode))
       else
         LSection.Items.Add(ParseVarDecl);
@@ -1765,7 +1524,7 @@ begin
   end;
   // A var initializer may be split by conditional compilation:
   //   X: T = {$IFDEF A}1{$ENDIF} {$IFDEF B}2{$ENDIF};
-  while HasConditionalStartTrivia and
+  while TDLTriviaAnalyzer.HasConditionalStart(GetCur) and
         ((GetKind in [tkString, tkInteger, tkFloat, tkCharCode]) or
          IsIdentifier or IsSymbol('[')) do
   begin
@@ -2127,7 +1886,7 @@ begin
   // Skip alternate branches of conditional compilation in type position:
   // x: {$IFDEF A}T1{$ELSE}T2{$ENDIF};  (conditional compilation is not
   // evaluated; the alternate branch token carries {$IFDEF}/{$ELSE} trivia).
-  while ((IsIdentifier) or (GetKind = tkKeyword)) and HasDirectiveTrivia do
+  while ((IsIdentifier) or (GetKind = tkKeyword)) and TDLTriviaAnalyzer.HasDirective(GetCur) do
     Advance;
   finally
     if not LSkipDepth then
@@ -2373,7 +2132,7 @@ begin
       Advance; // branch separator
     // Alternate conditional field lists of the same branch:
     //   3: (A: X); {$ELSE} (B: Y); {$ENDIF}
-    while IsSymbol('(') and HasConditionalStartTrivia do
+    while IsSymbol('(') and TDLTriviaAnalyzer.HasConditionalStart(GetCur) do
     begin
       Advance;
       while (GetKind <> tkEOF) and (not IsSymbol(')')) and
@@ -2602,13 +2361,13 @@ begin
   LAttributes := nil;
   if IsSymbol('[') then
     LAttributes := ParseAttributes;
-  if HasConditionalStartTrivia and
+  if TDLTriviaAnalyzer.HasConditionalStart(GetCur) and
      ((IsIdentifier and (LowerCase(GetText) = 'constref')) or
       (IsKeyword(kwConst) and (Peek(1).Kind = tkKeyword))) then
   begin
     // Conditional parameter modifier: {$IFDEF A}constref{$ELSE}const{$ENDIF}
     LModifier := pmConst; // keep the first branch
-    while HasConditionalStartTrivia and
+    while TDLTriviaAnalyzer.HasConditionalStart(GetCur) and
           (IsIdentifier or IsKeyword(kwConst) or IsKeyword(kwVar) or
            IsKeyword(kwOut)) do
       Advance;
@@ -2699,7 +2458,7 @@ begin
     LParam.DefaultValue := ParseExpression;
     // Default value may span conditional branches:
     //   X: T = {$IFDEF A} v1 {$ENDIF} {$IFDEF B} v2 {$ENDIF};
-    while HasConditionalStartTrivia and IsIdentifier do
+    while TDLTriviaAnalyzer.HasConditionalStart(GetCur) and IsIdentifier do
       ParseExpression.Free;
   end;
   Result := LParam;
@@ -2736,7 +2495,7 @@ begin
   // A shared-`end` construct: a class/interface/record member list runs into
   // a conditional branch marker without a terminating 'end'. Skip the
   // remaining branches so the declaration resumes after the {$ENDIF}.
-  if HasConditionalBranchTrivia then
+  if TDLTriviaAnalyzer.HasConditionalBranch(GetCur) then
     SkipConditionalBranchesToEndIf;
   if IsKeyword(kwStrict) then
   begin
@@ -3002,7 +2761,7 @@ begin
   // Conditional alternates of directive-only (external/forward) declarations:
   //   procedure X; external A name 'b'; {$ELSE} ; {$L f.obj} {$ENDIF}
   if LHasForward then
-    while HasConditionalStartTrivia do
+    while TDLTriviaAnalyzer.HasConditionalStart(GetCur) do
     begin
       // Skip the alternate branch up to its ';', but never across a
       // declaration boundary (procedure/function/class/...).
@@ -3023,7 +2782,7 @@ begin
       IsKeyword(kwVar) or IsKeyword(kwLabel) or IsKeyword(kwConst) or
       IsKeyword(kwType) or IsKeyword(kwFunction) or IsKeyword(kwProcedure)) then
   begin
-    LBodyConditional := HasConditionalStartTrivia or FDirectiveStmt;
+    LBodyConditional := TDLTriviaAnalyzer.HasConditionalStart(GetCur) or FDirectiveStmt;
     LImpl := TDLMethodImpl.Create(LStart, AKind,
       TDLIdentifier.Create(LName.Name, LName.Span, LName.IsAmpersand),
       AClassModifier);
@@ -3051,7 +2810,7 @@ begin
         kwType: LImpl.LocalDecls.Add(ParseTypeSection);
         kwFunction, kwProcedure:
           begin
-          if HasConditionalStartTrivia and
+          if TDLTriviaAnalyzer.HasConditionalStart(GetCur) and
              (Peek(1).Kind = tkIdentifier) and
              ((SameText(Peek(1).Text, LEnclosingName)) or
               ((Pos('.', LEnclosingName) > 0) and
@@ -3077,7 +2836,7 @@ begin
       LImpl.Body := ParseAsmStmt
     else
     begin
-      if HasConditionalStartTrivia then
+      if TDLTriviaAnalyzer.HasConditionalStart(GetCur) then
         LBodyConditional := True;
       LImpl.Body := ParseCompoundStmt;
     end;
@@ -3092,12 +2851,12 @@ begin
     while LBodyConditional and
           (((IsKeyword(kwBegin) or IsKeyword(kwAsm) or IsKeyword(kwVar) or
              IsKeyword(kwType) or IsKeyword(kwConst) or IsKeyword(kwLabel)) and
-            (HasConditionalStartTrivia or FDirectiveStmt)) or
+            (TDLTriviaAnalyzer.HasConditionalStart(GetCur) or FDirectiveStmt)) or
           ((IsKeyword(kwProcedure) or IsKeyword(kwFunction)) and
-           (HasBareElseTrivia or
-            ((HasConditionalStartTrivia and (GetSpan.Start.Column > 1) and
+           (TDLTriviaAnalyzer.HasBareElse(GetCur) or
+            ((TDLTriviaAnalyzer.HasConditionalStart(GetCur) and (GetSpan.Start.Column > 1) and
               SectionLeadsToBody)))) or
-           (IsMethodDirectiveStart and HasConditionalStartTrivia)) do
+           (IsMethodDirectiveStart and TDLTriviaAnalyzer.HasConditionalStart(GetCur))) do
     begin
       case GetKeyword of
         kwVar, kwType, kwConst, kwLabel:
@@ -3114,7 +2873,7 @@ begin
             // body (begin/asm) belongs to the enclosing scope, not to this
             // method body: backtrack so the section is parsed at module level.
             if (not SectionLeadsToBody) and
-               (not HasConditionalContinuationTrivia) and
+               (not TDLTriviaAnalyzer.HasConditionalContinuation(GetCur)) and
                (not FDirectiveStmt) then
             begin
               FPos := LContSave;
@@ -3219,7 +2978,7 @@ begin
           LDirective.Values.Add(TDLIdentifierExpr.Create(GetSpan,
             MakeIdentifier));
         // external {$IFDEF A}lib1{$ELSE}lib2{$ENDIF} [name 'x'];
-        while HasConditionalStartTrivia and
+        while TDLTriviaAnalyzer.HasConditionalStart(GetCur) and
               ((IsIdentifier or IsSoftNameKeyword) and
                (GetKeyword <> kwName) and (GetKeyword <> kwIndex)) do
           MakeIdentifier.Free;
@@ -3236,13 +2995,13 @@ begin
           LDirective.Values.Add(ParseExpression);
         end;
         // More conditional branches may follow the name/index specifier.
-        while HasConditionalStartTrivia and
+        while TDLTriviaAnalyzer.HasConditionalStart(GetCur) and
               (IsIdentifier or IsSoftNameKeyword) do
         begin
           MakeIdentifier.Free; // branch keyword (name) or library name
           // Consume the branch value until the next branch or the ';'.
           while (GetKind <> tkEOF) and (not IsSymbol(';')) and
-                (not HasConditionalStartTrivia) do
+                (not TDLTriviaAnalyzer.HasConditionalStart(GetCur)) do
             ParseExpression.Free; // the branch's value
         end;
       end;
@@ -3349,7 +3108,7 @@ begin
       Advance;
     LProperty.ReadName := MakeIdentifier;
     LProperty.ReadIsFunc := True;
-    while HasConditionalStartTrivia and (IsIdentifier or IsSoftNameKeyword) do
+    while TDLTriviaAnalyzer.HasConditionalStart(GetCur) and (IsIdentifier or IsSoftNameKeyword) do
       MakeIdentifier.Free; // alternate branch: read {$IFNDEF X}A{$ELSE}B{$ENDIF}
   end;
   if IsKeyword(kwWrite) then
@@ -3359,7 +3118,7 @@ begin
       Advance;
     LProperty.WriteName := MakeIdentifier;
     LProperty.WriteIsFunc := True;
-    while HasConditionalStartTrivia and (IsIdentifier or IsSoftNameKeyword) do
+    while TDLTriviaAnalyzer.HasConditionalStart(GetCur) and (IsIdentifier or IsSoftNameKeyword) do
       MakeIdentifier.Free;
   end;
   if IsKeyword(kwStored) then
@@ -3466,11 +3225,11 @@ begin
       LStatements.Add(TDLEmptyStmt.Create(GetSpan));
       Continue;
     end;
-    if HasConditionalStartTrivia then
+    if TDLTriviaAnalyzer.HasConditionalStart(GetCur) then
       FDirectiveStmt := True;
     LCond := nil;
-    if (LastConditionalDirective(LCond) = cdStart) and
-       CanStartConditionalGroup(False) and SingleConditionalInTrivia then
+    if (TDLTriviaAnalyzer.LastConditionalDirective(GetCur, LCond) = cdStart) and
+       TDLTriviaAnalyzer.CanStartConditionalGroup(FTokens, FPos, False) and TDLTriviaAnalyzer.SingleConditional(GetCur) then
       begin
         LCond.Free;
         LStatement := ParseConditionalStatementGroup;
@@ -3513,7 +3272,7 @@ begin
   LKeyword := GetKeyword;
   case LKeyword of
     kwBegin:
-      if FDirectiveStmt or HasConditionalStartTrivia then
+      if FDirectiveStmt or TDLTriviaAnalyzer.HasConditionalStart(GetCur) then
       begin
         // A begin introduced by a conditional-compilation directive
         // ({$IFDEF}/{$ELSE}/{$ENDIF}) continues the enclosing block (the
@@ -3614,7 +3373,7 @@ begin
   LCondition := ParseExpression;
   // if {$IFDEF A}x{$ELSE}y{$ENDIF} then  (condition over conditional
   // branches; keep the first branch, skip the alternates)
-  while HasConditionalStartTrivia and
+  while TDLTriviaAnalyzer.HasConditionalStart(GetCur) and
         (IsIdentifier or IsSoftNameKeyword or
          (GetKind in [tkInteger, tkString, tkFloat, tkCharCode]) or
          IsKeyword(kwNot)) do
@@ -4354,7 +4113,7 @@ begin
     // A call argument may contain a conditional-compilation type cast:
     // ({$IFDEF A}TypeA{$ELSE}TypeB{$ENDIF}(value))  -- keep the first branch,
     // parse (and discard) the alternates.
-    while HasDirectiveTrivia and
+    while TDLTriviaAnalyzer.HasDirective(GetCur) and
           (IsIdentifier or IsSoftNameKeyword or
            (GetKind in [tkString, tkInteger, tkFloat, tkCharCode])) do
     begin
