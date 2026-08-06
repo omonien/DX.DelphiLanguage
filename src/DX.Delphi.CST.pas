@@ -1313,9 +1313,12 @@ procedure DLSetContext(const AText: string);
 
 implementation
 
-var
-  GDLNodeCount: Integer = 0;
-  GDLContext: string = '';
+// The node-count guard is defensive state of a parse session. It must not
+// be shared between concurrent parses (e.g. two threads lowering different
+// files), so it lives in thread-local storage instead of a unit global.
+threadvar
+  GDLNodeCount: Integer;
+  GDLContext: string;
 
 { TDLTokenRef }
 
