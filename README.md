@@ -432,8 +432,12 @@ The crashes shared two root causes, both fixed in the parser:
 ### Next steps
 
 1. Reduce diagnostics: the formerly-crashing generated files still report
-   many parse errors (`Winapi.Windows.pas` 3158, `System.Skia.API.pas`
-   3025); these are the next optimisation targets.
+   many parse errors. This is largely done: the RTL corpus now reports 750
+   diagnostics (down from 6934); `Winapi.Windows.pas` and
+   `System.Generics.Defaults.pas` parse clean, `System.Skia.API.pas` has 1.
+   Remaining targets: `System.Variants.pas` (143, one conditional body with
+   nested `{$IF}` functions), `System.AnsiStrings.pas` (117), the non-UTF8
+   read-fail files, and the Spring4D tops (`Spring.Comparers.pas` 77).
 2. Implement the formatter bridge (step 3): document and test trivia /
    directive indentation and text re-generation from the branch tree.
 3. Re-measure the corpora and update this table after each step.
