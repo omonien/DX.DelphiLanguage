@@ -1976,7 +1976,9 @@ var
   LBoundHigh: TDLExpr;
   LName: string;
 begin
-  Inc(FStmtDepth);
+  // See ParseExpression: speculative generic lookahead must not grow depth.
+  if FSuppressCount = 0 then
+    Inc(FStmtDepth);
   if FStmtDepth > 200 then
     raise Exception.Create('DLP-FATAL: type recursion at "' + GetText +
       '" line=' + IntToStr(GetSpan.Start.Line));
@@ -2179,7 +2181,8 @@ begin
   while ((IsIdentifier) or (GetKind = tkKeyword)) and HasDirectiveTrivia do
     Advance;
   finally
-    Dec(FStmtDepth);
+    if FSuppressCount = 0 then
+      Dec(FStmtDepth);
   end;
 end;
 
@@ -4260,14 +4263,20 @@ end;
 function TDLDelphiParser.ParseExpression: TDLExpr;
 begin
   DLSetContext('expr:' + GetText);
-  Inc(FStmtDepth);
+  // During speculative generic-instantiation lookahead (FSuppressCount > 0)
+  // the type-argument parses must not grow the recursion depth: the rollback
+  // restores FPos, and nested ParseTypeExpr/ParseExpression calls would
+  // otherwise leak depth and eventually trip the recursion guard.
+  if FSuppressCount = 0 then
+    Inc(FStmtDepth);
   if FStmtDepth > 200 then
     raise Exception.Create('DLP-FATAL: expression recursion at "' + GetText +
       '" line=' + IntToStr(GetSpan.Start.Line));
   try
     Result := ParseBinary(0);
   finally
-    Dec(FStmtDepth);
+    if FSuppressCount = 0 then
+      Dec(FStmtDepth);
   end;
 end;
 
