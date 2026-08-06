@@ -234,7 +234,7 @@ begin
           LMethod := TDLMethod(LMember);
       Assert.IsNotNull(LMethod);
       Assert.AreEqual('Compute', LMethod.Name);
-      Assert.AreEqual(pkFunction, LMethod.Kind);
+      Assert.AreEqual(prFunction, LMethod.Kind);
       Assert.AreEqual('Integer', LMethod.ReturnType);
       Assert.AreEqual(1, LMethod.Params.Count);
       Assert.AreEqual(1, LMethod.Directives.Count);

@@ -16,8 +16,10 @@
 ///   fields; the full statement and expression grammar (including inline var
 ///   declarations, anonymous methods and multiline strings).
 ///
-///   Nodes are deliberately plain data holders; all logic lives in the parser
-///   and in the CST -> AST lowering pass (DX.Delphi.AstBuilder).
+///   Nodes are data holders that also implement their own rendering
+///   (Dump for tree dumps, ToSourceText for compact expression text);
+///   all grammar/parsing logic lives in the parser and in the CST -> AST
+///   lowering pass (DX.Delphi.AstBuilder).
 /// </remarks>
 /// <author>Olaf Monien</author>
 /// <created>2026-08-04</created>
@@ -34,83 +36,11 @@ uses
   DX.Delphi.Conditions;
 
 type
-  /// <summary>Program kind of a compilation unit.</summary>
-  TDLProgramKind = (
-    pkProgram,
-    pkUnit,
-    pkLibrary,
-    pkPackage
-  );
-
-  /// <summary>Procedure/function kind.</summary>
-  TDLProcKind = (
-    prProcedure,
-    prFunction,
-    prConstructor,
-    prDestructor,
-    prOperator
-  );
-
   /// <summary>Class modifier on a method ('class' keyword).</summary>
   TDLClassModifier = (
     cmNone,
     cmClass,
     cmStaticClass
-  );
-
-  /// <summary>Parameter passing modifier.</summary>
-  TDLParamModifier = (
-    pmNone,
-    pmConst,
-    pmVar,
-    pmOut,
-    pmConstRef,
-    pmVarRef
-  );
-
-  /// <summary>Member visibility.</summary>
-  TDLVisibility = (
-    vsNone,
-    vsPrivate,
-    vsProtected,
-    vsPublic,
-    vsPublished,
-    vsAutomated
-  );
-
-  /// <summary>Binary operator classification.</summary>
-  TDLBinaryOp = (
-    boNone,
-    boAdd,        // +
-    boSubtract,   // -
-    boMultiply,   // *
-    boDivide,     // / (real division)
-    boDiv,        // div
-    boMod,        // mod
-    boAnd,        // and
-    boOr,         // or
-    boXor,        // xor
-    boShl,        // shl
-    boShr,        // shr
-    boAs,         // as
-    boIs,         // is
-    boIn,         // in
-    boEqual,      // =
-    boNotEqual,   // <>
-    boLess,       // <
-    boLessEqual,  // <=
-    boGreater,    // >
-    boGreaterEqual // >=
-  );
-
-  /// <summary>Unary operator classification.</summary>
-  TDLUnaryOp = (
-    uoNone,
-    uoPlus,       // unary +
-    uoMinus,      // unary -
-    uoNot,        // not
-    uoAddr,       // @
-    uoDeref       // ^ (postfix)
   );
 
   /// <summary>Lightweight copy of a significant token (identifier, literal).</summary>
@@ -177,6 +107,10 @@ type
 
   /// <summary>An expression.</summary>
   TDLExpr = class abstract(TDLNode)
+  public
+    /// <summary>Renders this expression as compact source-like text
+    /// (used by the AST lowering pass and dumps).</summary>
+    function ToSourceText: string; virtual; abstract;
   end;
 
   /// <summary>A statement.</summary>
@@ -1185,6 +1119,7 @@ type
   private
     FName: TDLIdentifier;
   public
+    function ToSourceText: string; override;
     constructor Create(ASpan: TDLSourceSpan; AName: TDLIdentifier);
     destructor Destroy; override;
     procedure Dump(ABuilder: TStringBuilder; AIndent: Integer); override;
@@ -1196,6 +1131,7 @@ type
   private
     FToken: TDLTokenRef;
   public
+    function ToSourceText: string; override;
     constructor Create(ASpan: TDLSourceSpan; AToken: TDLTokenRef);
     procedure Dump(ABuilder: TStringBuilder; AIndent: Integer); override;
     property Token: TDLTokenRef read FToken;
@@ -1207,6 +1143,7 @@ type
     FToken: TDLTokenRef;
     FValue: string;
   public
+    function ToSourceText: string; override;
     constructor Create(ASpan: TDLSourceSpan; AToken: TDLTokenRef; const AValue: string);
     procedure Dump(ABuilder: TStringBuilder; AIndent: Integer); override;
     property Token: TDLTokenRef read FToken;
@@ -1216,6 +1153,7 @@ type
   /// <summary>nil literal.</summary>
   TDLNilExpr = class(TDLExpr)
   public
+    function ToSourceText: string; override;
     procedure Dump(ABuilder: TStringBuilder; AIndent: Integer); override;
   end;
 
@@ -1225,6 +1163,7 @@ type
     FElements: TList<TDLExpr>;
     FIsRanges: TList<Boolean>;
   public
+    function ToSourceText: string; override;
     constructor Create(ASpan: TDLSourceSpan);
     destructor Destroy; override;
     procedure Dump(ABuilder: TStringBuilder; AIndent: Integer); override;
@@ -1237,6 +1176,7 @@ type
   private
     FElements: TList<TDLExpr>;
   public
+    function ToSourceText: string; override;
     constructor Create(ASpan: TDLSourceSpan);
     destructor Destroy; override;
     procedure Dump(ABuilder: TStringBuilder; AIndent: Integer); override;
@@ -1251,6 +1191,7 @@ type
     FRight: TDLExpr;
     FOperatorText: string;
   public
+    function ToSourceText: string; override;
     constructor Create(ASpan: TDLSourceSpan; AOperator: TDLBinaryOp;
       const AOperatorText: string; ALeft, ARight: TDLExpr);
     destructor Destroy; override;
@@ -1268,6 +1209,7 @@ type
     FOperand: TDLExpr;
     FOperatorText: string;
   public
+    function ToSourceText: string; override;
     constructor Create(ASpan: TDLSourceSpan; AOperator: TDLUnaryOp;
       const AOperatorText: string; AOperand: TDLExpr);
     destructor Destroy; override;
@@ -1283,6 +1225,7 @@ type
     FTarget: TDLExpr;
     FIndices: TList<TDLExpr>;
   public
+    function ToSourceText: string; override;
     constructor Create(ASpan: TDLSourceSpan; ATarget: TDLExpr);
     destructor Destroy; override;
     procedure Dump(ABuilder: TStringBuilder; AIndent: Integer); override;
@@ -1296,6 +1239,7 @@ type
     FCallee: TDLExpr;
     FArgs: TList<TDLExpr>;
   public
+    function ToSourceText: string; override;
     constructor Create(ASpan: TDLSourceSpan; ACallee: TDLExpr);
     destructor Destroy; override;
     procedure Dump(ABuilder: TStringBuilder; AIndent: Integer); override;
@@ -1309,6 +1253,7 @@ type
     FTarget: TDLExpr;
     FMember: TDLIdentifier;
   public
+    function ToSourceText: string; override;
     constructor Create(ASpan: TDLSourceSpan; ATarget: TDLExpr; AMember: TDLIdentifier);
     destructor Destroy; override;
     procedure Dump(ABuilder: TStringBuilder; AIndent: Integer); override;
@@ -1322,6 +1267,7 @@ type
     FTarget: TDLExpr;
     FTypeArgs: TList<TDLTypeArg>;
   public
+    function ToSourceText: string; override;
     constructor Create(ASpan: TDLSourceSpan; ATarget: TDLExpr);
     destructor Destroy; override;
     procedure Dump(ABuilder: TStringBuilder; AIndent: Integer); override;
@@ -1334,6 +1280,7 @@ type
   private
     FTarget: TDLExpr;
   public
+    function ToSourceText: string; override;
     constructor Create(ASpan: TDLSourceSpan; ATarget: TDLExpr);
     destructor Destroy; override;
     procedure Dump(ABuilder: TStringBuilder; AIndent: Integer); override;
@@ -1349,6 +1296,7 @@ type
     FReturnType: TDLTypeExpr;
     FBody: TDLStatement;
   public
+    function ToSourceText: string; override;
     constructor Create(ASpan: TDLSourceSpan; AKind: TDLProcKind;
       AIsReferenceTo: Boolean);
     destructor Destroy; override;
@@ -1367,23 +1315,12 @@ procedure DLSetContext(const AText: string);
 
 implementation
 
-var
-  GDLNodeCount: Integer = 0;
-  GDLContext: string = '';
-
-const
-  CProgramKindText: array[TDLProgramKind] of string = ('program', 'unit',
-    'library', 'package');
-  CProcKindText: array[TDLProcKind] of string = ('procedure', 'function',
-    'constructor', 'destructor', 'operator');
-  CParamModifierText: array[TDLParamModifier] of string = ('', 'const', 'var',
-    'out', 'const ref', 'var ref');
-  CVisibilityText: array[TDLVisibility] of string = ('', 'private',
-    'protected', 'public', 'published', 'automated');
-  CBinaryOpText: array[TDLBinaryOp] of string = ('', '+', '-', '*', '/', 'div',
-    'mod', 'and', 'or', 'xor', 'shl', 'shr', 'as', 'is', 'in', '=', '<>', '<',
-    '<=', '>', '>=');
-  CUnaryOpText: array[TDLUnaryOp] of string = ('', '+', '-', 'not', '@', '^');
+// The node-count guard is defensive state of a parse session. It must not
+// be shared between concurrent parses (e.g. two threads lowering different
+// files), so it lives in thread-local storage instead of a unit global.
+threadvar
+  GDLNodeCount: Integer;
+  GDLContext: string;
 
 { TDLTokenRef }
 
@@ -1880,9 +1817,9 @@ var
   LText: string;
 begin
   if IsStrict then
-    LText := 'strict ' + CVisibilityText[FKind]
+    LText := 'strict ' + TDLVisibilityNames[FKind]
   else
-    LText := CVisibilityText[FKind];
+    LText := TDLVisibilityNames[FKind];
   inherited DumpHeader(ABuilder, AIndent, LText);
 end;
 
@@ -1916,7 +1853,7 @@ begin
     LNames := LNames + LName.Name;
   end;
   DumpHeader(ABuilder, AIndent, 'field %s [%s]', [LNames,
-    CVisibilityText[Visibility]]);
+    TDLVisibilityNames[Visibility]]);
   if FTypeExpr <> nil then
     FTypeExpr.Dump(ABuilder, AIndent + 1);
 end;
@@ -1953,7 +1890,7 @@ var
   LDirective: TDLDirective;
   LText: string;
 begin
-  LText := CProcKindText[FKind] + ' ' + FName.Name;
+  LText := TDLProcKindNames[FKind] + ' ' + FName.Name;
   if FClassModifier = cmClass then
     LText := 'class ' + LText
   else if FClassModifier = cmStaticClass then
@@ -2007,7 +1944,7 @@ var
   LKindText: string;
   LSuffix: string;
 begin
-  LKindText := CProcKindText[FKind];
+  LKindText := TDLProcKindNames[FKind];
   if FIsReferenceTo then
     LKindText := 'reference to ' + LKindText;
   if FIsOfObject then
@@ -2256,7 +2193,7 @@ begin
       LNames := LNames + ', ';
     LNames := LNames + LName.Name;
   end;
-  DumpHeader(ABuilder, AIndent, '%s %s', [CParamModifierText[FModifier], LNames]);
+  DumpHeader(ABuilder, AIndent, '%s %s', [TDLParamModifierNames[FModifier], LNames]);
   if FTypeExpr <> nil then
     FTypeExpr.Dump(ABuilder, AIndent + 1);
   if FDefaultValue <> nil then
@@ -2331,7 +2268,7 @@ var
   LUses: TDLUsesClause;
   LItem: TDLNode;
 begin
-  DumpHeader(ABuilder, AIndent, '%s %s', [CProgramKindText[FProgramKind],
+  DumpHeader(ABuilder, AIndent, '%s %s', [TDLProgramKindNames[FProgramKind],
     FName.Name]);
   for LUses in FUsesClauses do
     LUses.Dump(ABuilder, AIndent + 1);
@@ -3668,9 +3605,9 @@ var
   LParam: TDLParameter;
 begin
   if FIsReferenceTo then
-    DumpHeader(ABuilder, AIndent, 'reference to %s', [CProcKindText[FKind]])
+    DumpHeader(ABuilder, AIndent, 'reference to %s', [TDLProcKindNames[FKind]])
   else
-    DumpHeader(ABuilder, AIndent, 'anonymous %s', [CProcKindText[FKind]]);
+    DumpHeader(ABuilder, AIndent, 'anonymous %s', [TDLProcKindNames[FKind]]);
   for LParam in FParams do
     LParam.Dump(ABuilder, AIndent + 1);
   if FReturnType <> nil then
@@ -3680,6 +3617,212 @@ begin
   end;
   if FBody <> nil then
     FBody.Dump(ABuilder, AIndent + 1);
+end;
+
+{ ------------------------------------------------------------------ }
+{ Expression source-text rendering                                    }
+{ ------------------------------------------------------------------ }
+
+function TDLIdentifierExpr.ToSourceText: string;
+begin
+  Result := FName.Name;
+end;
+
+function TDLNumberExpr.ToSourceText: string;
+begin
+  Result := FToken.Text;
+end;
+
+function TDLStringExpr.ToSourceText: string;
+var
+  i: Integer;
+  LCh: Char;
+  LInQuote: Boolean;
+begin
+  // Render as valid Delphi source: apostrophes are doubled inside the quoted
+  // segments, and control characters are emitted as adjacent char-code
+  // literals (#13/#10/#9) because Delphi has no backslash escapes.
+  Result := '';
+  LInQuote := False;
+  for i := 1 to Length(FValue) do
+  begin
+    LCh := FValue[i];
+    if (LCh = #13) or (LCh = #10) or (LCh = #9) then
+    begin
+      if LInQuote then
+      begin
+        Result := Result + '''';
+        LInQuote := False;
+      end;
+      case LCh of
+        #13: Result := Result + '#13';
+        #10: Result := Result + '#10';
+        #9: Result := Result + '#9';
+      end;
+    end
+    else
+    begin
+      if not LInQuote then
+      begin
+        Result := Result + '''';
+        LInQuote := True;
+      end;
+      if LCh = '''' then
+        Result := Result + ''''''
+      else
+        Result := Result + LCh;
+    end;
+  end;
+  if LInQuote then
+    Result := Result + '''';
+end;
+
+function TDLNilExpr.ToSourceText: string;
+begin
+  Result := 'nil';
+end;
+
+function TDLBinaryExpr.ToSourceText: string;
+begin
+  if FOperatorText = '..' then
+    // Range expressions render compactly (set constructors, subranges).
+    Result := FLeft.ToSourceText + '..' + FRight.ToSourceText
+  else
+    Result := FLeft.ToSourceText + ' ' + FOperatorText + ' ' +
+      FRight.ToSourceText;
+end;
+
+function TDLUnaryExpr.ToSourceText: string;
+begin
+  if SameText(FOperatorText, 'not') then
+    Result := FOperatorText + ' ' + FOperand.ToSourceText
+  else
+    Result := FOperatorText + FOperand.ToSourceText;
+end;
+
+function TDLCallExpr.ToSourceText: string;
+var
+  i: Integer;
+begin
+  Result := FCallee.ToSourceText + '(';
+  for i := 0 to FArgs.Count - 1 do
+  begin
+    if i > 0 then
+      Result := Result + ', ';
+    Result := Result + FArgs[i].ToSourceText;
+  end;
+  Result := Result + ')';
+end;
+
+function TDLMemberExpr.ToSourceText: string;
+begin
+  Result := FTarget.ToSourceText + '.' + FMember.Name;
+end;
+
+function TDLIndexExpr.ToSourceText: string;
+var
+  i: Integer;
+begin
+  Result := FTarget.ToSourceText + '[';
+  for i := 0 to FIndices.Count - 1 do
+  begin
+    if i > 0 then
+      Result := Result + ', ';
+    Result := Result + FIndices[i].ToSourceText;
+  end;
+  Result := Result + ']';
+end;
+
+/// <summary>Renders a CST type expression as compact source text. Named
+/// types render recursively, so nested generics (TList&lt;Integer&gt;) keep
+/// their full type-argument list.</summary>
+function DLTypeExprText(ATypeExpr: TDLTypeExpr): string;
+var
+  LNamed: TDLNamedType;
+  LArg: TDLTypeArg;
+  i: Integer;
+begin
+  if ATypeExpr is TDLNamedType then
+  begin
+    LNamed := TDLNamedType(ATypeExpr);
+    Result := LNamed.Name.Name;
+    if LNamed.TypeArgs.Count > 0 then
+    begin
+      Result := Result + '<';
+      for i := 0 to LNamed.TypeArgs.Count - 1 do
+      begin
+        if i > 0 then
+          Result := Result + ', ';
+        LArg := LNamed.TypeArgs[i];
+        Result := Result + DLTypeExprText(LArg.TypeExpr);
+      end;
+      Result := Result + '>';
+    end;
+  end
+  else if ATypeExpr is TDLStringType then
+    Result := 'string'
+  else if ATypeExpr is TDLDynamicArrayType then
+    Result := 'array of ' + DLTypeExprText(
+      TDLDynamicArrayType(ATypeExpr).ElementType)
+  else if ATypeExpr is TDLPointerType then
+    Result := '^' + DLTypeExprText(TDLPointerType(ATypeExpr).Pointee)
+  else
+    Result := '?';
+end;
+
+function TDLGenericInstantiationExpr.ToSourceText: string;
+var
+  i: Integer;
+begin
+  Result := FTarget.ToSourceText + '<';
+  for i := 0 to FTypeArgs.Count - 1 do
+  begin
+    if i > 0 then
+      Result := Result + ', ';
+    Result := Result + DLTypeExprText(FTypeArgs[i].TypeExpr);
+  end;
+  Result := Result + '>';
+end;
+
+function TDLSetExpr.ToSourceText: string;
+var
+  i: Integer;
+begin
+  Result := '[';
+  for i := 0 to FElements.Count - 1 do
+  begin
+    if i > 0 then
+      Result := Result + ', ';
+    Result := Result + FElements[i].ToSourceText;
+  end;
+  Result := Result + ']';
+end;
+
+function TDLArrayExpr.ToSourceText: string;
+var
+  i: Integer;
+begin
+  Result := '[';
+  for i := 0 to FElements.Count - 1 do
+  begin
+    if i > 0 then
+      Result := Result + ', ';
+    Result := Result + FElements[i].ToSourceText;
+  end;
+  Result := Result + ']';
+end;
+
+function TDLInheritedExpr.ToSourceText: string;
+begin
+  if FTarget <> nil then
+    Result := 'inherited ' + FTarget.ToSourceText
+  else
+    Result := 'inherited';
+end;
+
+function TDLAnonymousMethodExpr.ToSourceText: string;
+begin
+  Result := '<anonymous method>';
 end;
 
 end.

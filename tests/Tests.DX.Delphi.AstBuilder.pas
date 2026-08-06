@@ -67,7 +67,7 @@ begin
       LDiagnostics);
     try
       Assert.AreEqual(0, LDiagnostics.Count);
-      Assert.AreEqual(mkUnit, LModule.Kind);
+      Assert.AreEqual(pkUnit, LModule.Kind);
       Assert.AreEqual('Demo', LModule.Name);
     finally
       LModule.Free;
@@ -265,7 +265,7 @@ begin
       LProc := TDLProcDecl(LModule.Declarations[0]);
       LAssign := TDLAssignStmt(LProc.Body[0]);
       Assert.IsTrue(LAssign.Value is TDLAnonMethodExpr);
-      Assert.AreEqual(pkFunction, TDLAnonMethodExpr(
+      Assert.AreEqual(prFunction, TDLAnonMethodExpr(
         LAssign.Value).Kind);
       Assert.AreEqual('Integer', TDLAnonMethodExpr(
         LAssign.Value).ReturnType);

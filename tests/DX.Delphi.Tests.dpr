@@ -38,6 +38,7 @@ uses
   Tests.DX.Delphi.Diagnostics in 'Tests.DX.Delphi.Diagnostics.pas',
   Tests.DX.Delphi.Conditions in 'Tests.DX.Delphi.Conditions.pas',
   Tests.DX.Delphi.Trivia in 'Tests.DX.Delphi.Trivia.pas',
+  Tests.DX.Delphi.Rendering in 'Tests.DX.Delphi.Rendering.pas',
   Tests.DX.Delphi.RealWorld in 'Tests.DX.Delphi.RealWorld.pas',
   Tests.DX.Delphi.Samples in 'Tests.DX.Delphi.Samples.pas';
 

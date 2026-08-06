@@ -45,7 +45,7 @@ type
   private
     FDiagnostics: TDLDiagnostics;
     FSymbols: TDLSymbolTable;
-    function RenderExpr(AExpr: DX.Delphi.CST.TDLExpr): string;
+    function RenderExprOrEmpty(AExpr: DX.Delphi.CST.TDLExpr): string;
     function RenderTypeName(ATypeExpr: DX.Delphi.CST.TDLTypeExpr): string;
     function BuildTypeDef(ATypeExpr: DX.Delphi.CST.TDLTypeExpr): DX.Delphi.AST.TDLTypeDef;
     function BuildParams(AParams: TList<DX.Delphi.CST.TDLParameter>): TList<DX.Delphi.AST.TDLParam>;
@@ -83,12 +83,16 @@ implementation
 uses
   System.StrUtils;
 
-const
-  CProcKindMap: array[DX.Delphi.CST.TDLProcKind] of DX.Delphi.AST.TDLProcKind = (
-    DX.Delphi.AST.pkProcedure, DX.Delphi.AST.pkFunction, DX.Delphi.AST.pkConstructor, DX.Delphi.AST.pkDestructor,
-    DX.Delphi.AST.pkOperator);
-
 { TDLDelphiAstBuilder }
+
+function TDLDelphiAstBuilder.RenderExprOrEmpty(
+  AExpr: DX.Delphi.CST.TDLExpr): string;
+begin
+  if AExpr = nil then
+    Result := ''
+  else
+    Result := AExpr.ToSourceText;
+end;
 
 constructor TDLDelphiAstBuilder.Create(ADiagnostics: TDLDiagnostics);
 begin
@@ -101,136 +105,6 @@ destructor TDLDelphiAstBuilder.Destroy;
 begin
   FSymbols.Free;
   inherited Destroy;
-end;
-
-function TDLDelphiAstBuilder.RenderExpr(AExpr: DX.Delphi.CST.TDLExpr): string;
-var
-  LBinary: DX.Delphi.CST.TDLBinaryExpr;
-  LUnary: DX.Delphi.CST.TDLUnaryExpr;
-  LCall: DX.Delphi.CST.TDLCallExpr;
-  LMember: DX.Delphi.CST.TDLMemberExpr;
-  LIndex: DX.Delphi.CST.TDLIndexExpr;
-  LGeneric: DX.Delphi.CST.TDLGenericInstantiationExpr;
-  LIdent: DX.Delphi.CST.TDLIdentifierExpr;
-  LNumber: DX.Delphi.CST.TDLNumberExpr;
-  LString: DX.Delphi.CST.TDLStringExpr;
-  LSet: DX.Delphi.CST.TDLSetExpr;
-  LArray: DX.Delphi.CST.TDLArrayExpr;
-  LInherited: DX.Delphi.CST.TDLInheritedExpr;
-  i: Integer;
-begin
-  if AExpr is DX.Delphi.CST.TDLIdentifierExpr then
-  begin
-    LIdent := DX.Delphi.CST.TDLIdentifierExpr(AExpr);
-    Result := LIdent.Name.Name;
-  end
-  else if AExpr is DX.Delphi.CST.TDLNumberExpr then
-  begin
-    LNumber := DX.Delphi.CST.TDLNumberExpr(AExpr);
-    Result := LNumber.Token.Text;
-  end
-  else if AExpr is DX.Delphi.CST.TDLStringExpr then
-  begin
-    LString := DX.Delphi.CST.TDLStringExpr(AExpr);
-    Result := StringReplace(LString.Value, '''', '''''', [rfReplaceAll]);
-    Result := StringReplace(Result, #13, '\r', [rfReplaceAll]);
-    Result := StringReplace(Result, #10, '\n', [rfReplaceAll]);
-    Result := StringReplace(Result, #9, '\t', [rfReplaceAll]);
-    Result := '''' + Result + '''';
-  end
-  else if AExpr is DX.Delphi.CST.TDLNilExpr then
-    Result := 'nil'
-  else if AExpr is DX.Delphi.CST.TDLBinaryExpr then
-  begin
-    LBinary := DX.Delphi.CST.TDLBinaryExpr(AExpr);
-    Result := RenderExpr(LBinary.Left) + ' ' + LBinary.OperatorText + ' ' +
-      RenderExpr(LBinary.Right);
-  end
-  else if AExpr is DX.Delphi.CST.TDLUnaryExpr then
-  begin
-    LUnary := DX.Delphi.CST.TDLUnaryExpr(AExpr);
-    Result := LUnary.OperatorText + RenderExpr(LUnary.Operand);
-  end
-  else if AExpr is DX.Delphi.CST.TDLCallExpr then
-  begin
-    LCall := DX.Delphi.CST.TDLCallExpr(AExpr);
-    Result := RenderExpr(LCall.Callee) + '(';
-    for i := 0 to LCall.Args.Count - 1 do
-    begin
-      if i > 0 then
-        Result := Result + ', ';
-      Result := Result + RenderExpr(LCall.Args[i]);
-    end;
-    Result := Result + ')';
-  end
-  else if AExpr is DX.Delphi.CST.TDLMemberExpr then
-  begin
-    LMember := DX.Delphi.CST.TDLMemberExpr(AExpr);
-    Result := RenderExpr(LMember.Target) + '.' + LMember.Member.Name;
-  end
-  else if AExpr is DX.Delphi.CST.TDLIndexExpr then
-  begin
-    LIndex := DX.Delphi.CST.TDLIndexExpr(AExpr);
-    Result := RenderExpr(LIndex.Target) + '[';
-    for i := 0 to LIndex.Indices.Count - 1 do
-    begin
-      if i > 0 then
-        Result := Result + ', ';
-      Result := Result + RenderExpr(LIndex.Indices[i]);
-    end;
-    Result := Result + ']';
-  end
-  else if AExpr is DX.Delphi.CST.TDLGenericInstantiationExpr then
-  begin
-    LGeneric := DX.Delphi.CST.TDLGenericInstantiationExpr(AExpr);
-    Result := RenderExpr(LGeneric.Target) + '<';
-    for i := 0 to LGeneric.TypeArgs.Count - 1 do
-    begin
-      if i > 0 then
-        Result := Result + ', ';
-      if LGeneric.TypeArgs[i].TypeExpr is DX.Delphi.CST.TDLNamedType then
-        Result := Result + DX.Delphi.CST.TDLNamedType(LGeneric.TypeArgs[i].TypeExpr).Name.Name
-      else
-        Result := Result + '?';
-    end;
-    Result := Result + '>';
-  end
-  else if AExpr is DX.Delphi.CST.TDLSetExpr then
-  begin
-    LSet := DX.Delphi.CST.TDLSetExpr(AExpr);
-    Result := '[';
-    for i := 0 to LSet.Elements.Count - 1 do
-    begin
-      if i > 0 then
-        Result := Result + ', ';
-      Result := Result + RenderExpr(LSet.Elements[i]);
-    end;
-    Result := Result + ']';
-  end
-  else if AExpr is DX.Delphi.CST.TDLArrayExpr then
-  begin
-    LArray := DX.Delphi.CST.TDLArrayExpr(AExpr);
-    Result := '[';
-    for i := 0 to LArray.Elements.Count - 1 do
-    begin
-      if i > 0 then
-        Result := Result + ', ';
-      Result := Result + RenderExpr(LArray.Elements[i]);
-    end;
-    Result := Result + ']';
-  end
-  else if AExpr is DX.Delphi.CST.TDLInheritedExpr then
-  begin
-    LInherited := DX.Delphi.CST.TDLInheritedExpr(AExpr);
-    if LInherited.Target <> nil then
-      Result := 'inherited ' + RenderExpr(LInherited.Target)
-    else
-      Result := 'inherited';
-  end
-  else if AExpr is DX.Delphi.CST.TDLAnonymousMethodExpr then
-    Result := '<anonymous method>'
-  else
-    Result := '?';
 end;
 
 function TDLDelphiAstBuilder.RenderTypeName(ATypeExpr: DX.Delphi.CST.TDLTypeExpr): string;
@@ -315,14 +189,14 @@ begin
   begin
     LSubrange := DX.Delphi.CST.TDLSubrangeType(ATypeExpr);
     Result := DX.Delphi.AST.TDLSubrangeTypeDef.Create(ATypeExpr.Span,
-      RenderExpr(LSubrange.Low), RenderExpr(LSubrange.High));
+      RenderExprOrEmpty(LSubrange.Low), RenderExprOrEmpty(LSubrange.High));
   end
   else if ATypeExpr is DX.Delphi.CST.TDLStringType then
   begin
     LStringType := DX.Delphi.CST.TDLStringType(ATypeExpr);
     if LStringType.Length <> nil then
       Result := DX.Delphi.AST.TDLStringTypeDef.Create(ATypeExpr.Span,
-        StrToIntDef(RenderExpr(LStringType.Length), 0))
+        StrToIntDef(LStringType.Length.ToSourceText, 0))
     else
       Result := DX.Delphi.AST.TDLStringTypeDef.Create(ATypeExpr.Span, 0);
   end
@@ -343,7 +217,8 @@ begin
     for LBound in LStatic.Bounds do
     begin
       if LBound.Expr <> nil then
-        DX.Delphi.AST.TDLStaticArrayTypeDef(LDef).Bounds.Add(RenderExpr(LBound.Expr))
+        DX.Delphi.AST.TDLStaticArrayTypeDef(LDef).Bounds.Add(
+          LBound.Expr.ToSourceText)
       else if LBound.TypeExpr <> nil then
         DX.Delphi.AST.TDLStaticArrayTypeDef(LDef).Bounds.Add(
           RenderTypeName(LBound.TypeExpr));
@@ -406,7 +281,7 @@ begin
   begin
     LProc := DX.Delphi.CST.TDLProceduralType(ATypeExpr);
     LDef := DX.Delphi.AST.TDLProceduralTypeDef.Create(ATypeExpr.Span,
-      CProcKindMap[LProc.Kind], LProc.IsOfObject, LProc.IsReferenceTo);
+      LProc.Kind, LProc.IsOfObject, LProc.IsReferenceTo);
     DX.Delphi.AST.TDLProceduralTypeDef(LDef).Params.AddRange(
       BuildParams(LProc.Params));
     if LProc.ReturnType <> nil then
@@ -429,7 +304,7 @@ begin
   for LParam in AParams do
   begin
     LAstParam := DX.Delphi.AST.TDLParam.Create(LParam.Span,
-      DX.Delphi.AST.TDLParamMode(LParam.Modifier));
+      LParam.Modifier);
     for LName in LParam.Names do
       LAstParam.Names.Add(LName.Name);
     if LParam.TypeExpr <> nil then
@@ -548,7 +423,6 @@ begin
   begin
     LWith := DX.Delphi.CST.TDLWithStmt(AStmt);
     LAst := DX.Delphi.AST.TDLWithStmt.Create(AStmt.Span);
-    LExpression := nil;
     for LExpression in LWith.Expressions do
       DX.Delphi.AST.TDLWithStmt(LAst).Expressions.Add(BuildExpression(LExpression));
     DX.Delphi.AST.TDLWithStmt(LAst).Body := BuildStatement(LWith.Body);
@@ -729,14 +603,14 @@ begin
   begin
     LBinary := DX.Delphi.CST.TDLBinaryExpr(AExpr);
     Result := DX.Delphi.AST.TDLBinaryExpr.Create(AExpr.Span,
-      DX.Delphi.AST.TDLBinOp(LBinary.Operator), LBinary.OperatorText,
+      LBinary.Operator, LBinary.OperatorText,
       BuildExpression(LBinary.Left), BuildExpression(LBinary.Right));
   end
   else if AExpr is DX.Delphi.CST.TDLUnaryExpr then
   begin
     LUnary := DX.Delphi.CST.TDLUnaryExpr(AExpr);
     Result := DX.Delphi.AST.TDLUnaryExpr.Create(AExpr.Span,
-      DX.Delphi.AST.TDLUnOp(LUnary.Operator), LUnary.OperatorText,
+      LUnary.Operator, LUnary.OperatorText,
       BuildExpression(LUnary.Operand));
   end
   else if AExpr is DX.Delphi.CST.TDLIndexExpr then
@@ -770,9 +644,9 @@ begin
     LAst := DX.Delphi.AST.TDLGenericInstExpr.Create(AExpr.Span,
       BuildExpression(LGeneric.Target));
     for LTypeArg in LGeneric.TypeArgs do
-      if LTypeArg.TypeExpr is DX.Delphi.CST.TDLNamedType then
+      if LTypeArg.TypeExpr <> nil then
         DX.Delphi.AST.TDLGenericInstExpr(LAst).TypeArgs.Add(
-          DX.Delphi.CST.TDLNamedType(LTypeArg.TypeExpr).Name.Name);
+          RenderTypeName(LTypeArg.TypeExpr));
     Result := LAst;
   end
   else if AExpr is DX.Delphi.CST.TDLInheritedExpr then
@@ -788,7 +662,7 @@ begin
   begin
     LAnon := DX.Delphi.CST.TDLAnonymousMethodExpr(AExpr);
     LAst := DX.Delphi.AST.TDLAnonMethodExpr.Create(AExpr.Span,
-      CProcKindMap[LAnon.Kind]);
+      LAnon.Kind);
     DX.Delphi.AST.TDLAnonMethodExpr(LAst).Params.AddRange(
       BuildParams(LAnon.Params));
     if LAnon.ReturnType <> nil then
@@ -842,13 +716,13 @@ begin
     begin
       LVisibility := DX.Delphi.CST.TDLVisibilitySection(LMember);
       AASTMembers.Add(DX.Delphi.AST.TDLVisibilitySection.Create(LMember.Span,
-        DX.Delphi.AST.TDLVisibility(LVisibility.Kind), LVisibility.IsStrict));
+        LVisibility.Kind, LVisibility.IsStrict));
     end
     else if LMember is DX.Delphi.CST.TDLFieldDecl then
     begin
       LField := DX.Delphi.CST.TDLFieldDecl(LMember);
       LAst := DX.Delphi.AST.TDLField.Create(LMember.Span,
-        DX.Delphi.AST.TDLVisibility(LField.Visibility), LField.IsStrict);
+        LField.Visibility, LField.IsStrict);
       for LName in LField.Names do
         DX.Delphi.AST.TDLField(LAst).Names.Add(LName.Name);
       if LField.TypeExpr <> nil then
@@ -861,9 +735,9 @@ begin
     begin
       LMethod := DX.Delphi.CST.TDLMethodDecl(LMember);
       LAstMethod := DX.Delphi.AST.TDLMethod.Create(LMember.Span,
-        CProcKindMap[LMethod.Kind], LMethod.Name.Name,
+        LMethod.Kind, LMethod.Name.Name,
         LMethod.ClassModifier = cmClass,
-        DX.Delphi.AST.TDLVisibility(LMethod.Visibility));
+        LMethod.Visibility);
       LAstMethod.Params.AddRange(BuildParams(LMethod.Params));
       if LMethod.ReturnType <> nil then
         LAstMethod.ReturnType := RenderTypeName(LMethod.ReturnType);
@@ -878,9 +752,9 @@ begin
     begin
       LImpl := DX.Delphi.CST.TDLMethodImpl(LMember);
       LAstMethod := DX.Delphi.AST.TDLMethod.Create(LMember.Span,
-        CProcKindMap[LImpl.Kind], LImpl.Name.Name,
+        LImpl.Kind, LImpl.Name.Name,
         LImpl.ClassModifier = cmClass,
-        DX.Delphi.AST.TDLVisibility(LImpl.Visibility));
+        LImpl.Visibility);
       LAstMethod.Params.AddRange(BuildParams(LImpl.Params));
       if LImpl.ReturnType <> nil then
         LAstMethod.ReturnType := RenderTypeName(LImpl.ReturnType);
@@ -899,7 +773,7 @@ begin
     begin
       LProperty := DX.Delphi.CST.TDLPropertyDecl(LMember);
       LAst := DX.Delphi.AST.TDLProperty.Create(LMember.Span, LProperty.Name.Name,
-        DX.Delphi.AST.TDLVisibility(LProperty.Visibility));
+        LProperty.Visibility);
       DX.Delphi.AST.TDLProperty(LAst).TypeName :=
         RenderTypeName(LProperty.TypeExpr);
       DX.Delphi.AST.TDLProperty(LAst).IndexParams.AddRange(
@@ -921,7 +795,7 @@ begin
     end
     else
       AASTMembers.Add(DX.Delphi.AST.TDLVisibilitySection.Create(LMember.Span,
-        DX.Delphi.AST.vsPublic, False));
+        vsPublic, False));
   end;
 end;
 
@@ -943,10 +817,10 @@ begin
   for LBranch in ACSTPart.Variants do
   begin
     for LLabel in LBranch.CaseLabels do
-      LPart.Labels.Add(RenderExpr(LLabel));
+      LPart.Labels.Add(LLabel.ToSourceText);
     for LField in LBranch.Fields do
     begin
-      LAstField := DX.Delphi.AST.TDLField.Create(LField.Span, DX.Delphi.AST.vsPublic, False);
+      LAstField := DX.Delphi.AST.TDLField.Create(LField.Span, vsPublic, False);
       for LName in LField.Names do
         LAstField.Names.Add(LName.Name);
       if LField.TypeExpr <> nil then
@@ -1136,29 +1010,17 @@ end;
 function TDLDelphiAstBuilder.Build(ACST: DX.Delphi.CST.TDLCompilationUnit): DX.Delphi.AST.TDLModule;
 var
   LModule: DX.Delphi.AST.TDLModule;
-  LKind: DX.Delphi.AST.TDLModuleKind;
+  LKind: TDLProgramKind;
   LUse: DX.Delphi.CST.TDLUsesClause;
   LReference: DX.Delphi.CST.TDLUnitReference;
   LItem: DX.Delphi.CST.TDLNode;
-  LTypeSection: DX.Delphi.CST.TDLTypeSection;
-  LTypeDecl: DX.Delphi.CST.TDLTypeDecl;
-  LTypeItem: DX.Delphi.CST.TDLNode;
-  LConstSection: DX.Delphi.CST.TDLConstSection;
   LConstDecl: DX.Delphi.CST.TDLConstDecl;
-  LConstItem: DX.Delphi.CST.TDLNode;
   LResStringSection: DX.Delphi.CST.TDLResStringSection;
-  LVarSection: DX.Delphi.CST.TDLVarSection;
-  LVarDecl: DX.Delphi.CST.TDLVarDecl;
-  LVarItem: DX.Delphi.CST.TDLNode;
-  LLabelSection: DX.Delphi.CST.TDLLabelSection;
-  LLabelDecl: DX.Delphi.CST.TDLLabelDecl;
   LExports: DX.Delphi.CST.TDLExportsClause;
   LExport: DX.Delphi.CST.TDLExportItem;
   LProc: DX.Delphi.CST.TDLProcedureBase;
   LImpl: DX.Delphi.CST.TDLMethodImpl;
   LAstConst: DX.Delphi.AST.TDLConstDecl;
-  LAstVar: DX.Delphi.AST.TDLVarDecl;
-  LAstLabel: DX.Delphi.AST.TDLLabelDecl;
   LAstExport: DX.Delphi.AST.TDLExportDecl;
   LAstProc: DX.Delphi.AST.TDLProcDecl;
   LAstUse: DX.Delphi.AST.TDLUse;
@@ -1167,13 +1029,8 @@ var
   LStmt: DX.Delphi.CST.TDLStatement;
   LDecl: DX.Delphi.CST.TDLNode;
 begin
-  case ACST.ProgramKind of
-    pkProgram: LKind := DX.Delphi.AST.mkProgram;
-    pkUnit: LKind := DX.Delphi.AST.mkUnit;
-    pkLibrary: LKind := DX.Delphi.AST.mkLibrary;
-  else
-    LKind := DX.Delphi.AST.mkPackage;
-  end;
+  // The program kind is a shared enum (Core); no mapping needed.
+  LKind := ACST.ProgramKind;
   LModule := DX.Delphi.AST.TDLModule.Create(ACST.Span, LKind, ACST.Name.Name);
   FSymbols.Add(TDLSymbol.Create(ACST.Name.Name, skUnit, ACST.Name.Span));
 
@@ -1188,37 +1045,13 @@ begin
 
   for LItem in ACST.Items do
   begin
-    if LItem is DX.Delphi.CST.TDLTypeSection then
-    begin
-      LTypeSection := DX.Delphi.CST.TDLTypeSection(LItem);
-      for LTypeItem in LTypeSection.Items do
-        if LTypeItem is DX.Delphi.CST.TDLTypeDecl then
-        begin
-          LTypeDecl := DX.Delphi.CST.TDLTypeDecl(LTypeItem);
-          LModule.Declarations.Add(BuildTypeDecl(LTypeDecl));
-          FSymbols.Add(TDLSymbol.Create(LTypeDecl.Name.Name, skType,
-            LTypeDecl.Name.Span));
-        end
-        else if LTypeItem is DX.Delphi.CST.TDLConditionalGroup then
-          LModule.Declarations.Add(BuildDeclConditionalGroup(
-            DX.Delphi.CST.TDLConditionalGroup(LTypeItem), ikType));
-    end
-    else if LItem is DX.Delphi.CST.TDLConstSection then
-    begin
-      LConstSection := DX.Delphi.CST.TDLConstSection(LItem);
-      for LConstItem in LConstSection.Items do
-        if LConstItem is DX.Delphi.CST.TDLConstDecl then
-        begin
-          LConstDecl := DX.Delphi.CST.TDLConstDecl(LConstItem);
-          LAstConst := BuildConstDecl(LConstDecl);
-          LModule.Declarations.Add(LAstConst);
-          for LName in LConstDecl.Names do
-            FSymbols.Add(TDLSymbol.Create(LName.Name, skConst, LName.Span));
-        end
-        else if LConstItem is DX.Delphi.CST.TDLConditionalGroup then
-          LModule.Declarations.Add(BuildDeclConditionalGroup(
-            DX.Delphi.CST.TDLConditionalGroup(LConstItem), ikConst));
-    end
+    // Type/const/var/label sections share one lowering path with the
+    // local declarations of method bodies (BuildSectionDeclarations).
+    if (LItem is DX.Delphi.CST.TDLTypeSection) or
+       (LItem is DX.Delphi.CST.TDLConstSection) or
+       (LItem is DX.Delphi.CST.TDLVarSection) or
+       (LItem is DX.Delphi.CST.TDLLabelSection) then
+      BuildSectionDeclarations(LItem, LModule.Declarations)
     else if LItem is DX.Delphi.CST.TDLResStringSection then
     begin
       LResStringSection := DX.Delphi.CST.TDLResStringSection(LItem);
@@ -1235,38 +1068,6 @@ begin
             LName.Span));
       end;
     end
-    else if LItem is DX.Delphi.CST.TDLVarSection then
-    begin
-      LVarSection := DX.Delphi.CST.TDLVarSection(LItem);
-      for LVarItem in LVarSection.Items do
-        if LVarItem is DX.Delphi.CST.TDLVarDecl then
-        begin
-          LVarDecl := DX.Delphi.CST.TDLVarDecl(LVarItem);
-          LAstVar := BuildVarDecl(LVarDecl, LVarSection.IsThreadVar);
-          LModule.Declarations.Add(LAstVar);
-          for LName in LVarDecl.Names do
-            if LVarSection.IsThreadVar then
-              FSymbols.Add(TDLSymbol.Create(LName.Name, skThreadVar,
-                LName.Span))
-            else
-              FSymbols.Add(TDLSymbol.Create(LName.Name, skVar, LName.Span));
-        end
-        else if LVarItem is DX.Delphi.CST.TDLConditionalGroup then
-          LModule.Declarations.Add(BuildDeclConditionalGroup(
-            DX.Delphi.CST.TDLConditionalGroup(LVarItem), ikVar));
-    end
-    else if LItem is DX.Delphi.CST.TDLLabelSection then
-    begin
-      LLabelSection := DX.Delphi.CST.TDLLabelSection(LItem);
-      for LLabelDecl in LLabelSection.Items do
-      begin
-        LAstLabel := DX.Delphi.AST.TDLLabelDecl.Create(LLabelDecl.Span,
-          LLabelDecl.Name.Name);
-        LModule.Declarations.Add(LAstLabel);
-        FSymbols.Add(TDLSymbol.Create(LLabelDecl.Name.Name, skLabel,
-          LLabelDecl.Name.Span));
-      end;
-    end
     else if LItem is DX.Delphi.CST.TDLExportsClause then
     begin
       LExports := DX.Delphi.CST.TDLExportsClause(LItem);
@@ -1275,7 +1076,7 @@ begin
         LAstExport := DX.Delphi.AST.TDLExportDecl.Create(LExport.Span,
           LExport.Name.Name);
         if LExport.Index <> nil then
-          LAstExport.Index := RenderExpr(LExport.Index);
+          LAstExport.Index := LExport.Index.ToSourceText;
         if LExport.NameSpec is DX.Delphi.CST.TDLStringExpr then
           LAstExport.ExportName :=
             DX.Delphi.CST.TDLStringExpr(LExport.NameSpec).Value;
@@ -1286,7 +1087,7 @@ begin
     begin
       LImpl := DX.Delphi.CST.TDLMethodImpl(LItem);
       LAstProc := DX.Delphi.AST.TDLProcDecl.Create(LImpl.Span,
-        CProcKindMap[LImpl.Kind], LImpl.Name.Name,
+        LImpl.Kind, LImpl.Name.Name,
         LImpl.ClassModifier = cmClass);
       LAstProc.Params.AddRange(BuildParams(LImpl.Params));
       if LImpl.ReturnType <> nil then
@@ -1308,7 +1109,7 @@ begin
     begin
       LProc := DX.Delphi.CST.TDLMethodDecl(LItem);
       LAstProc := DX.Delphi.AST.TDLProcDecl.Create(LProc.Span,
-        CProcKindMap[LProc.Kind], LProc.Name.Name,
+        LProc.Kind, LProc.Name.Name,
         LProc.ClassModifier = cmClass);
       LAstProc.Params.AddRange(BuildParams(LProc.Params));
       if LProc.ReturnType <> nil then
