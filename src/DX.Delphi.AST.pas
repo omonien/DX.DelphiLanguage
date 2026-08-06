@@ -2644,13 +2644,47 @@ begin
 end;
 
 function TDLStringExpr.ToSourceText: string;
+var
+  i: Integer;
+  LCh: Char;
+  LInQuote: Boolean;
 begin
-  Result := '''' + StringReplace(FValue, '''', '''''', [rfReplaceAll]) + '''';
-  // Emit valid Delphi source for control characters (char-code literals),
-  // not backslash escapes, which Delphi does not support.
-  Result := StringReplace(Result, #13, '''#13''', [rfReplaceAll]);
-  Result := StringReplace(Result, #10, '''#10''', [rfReplaceAll]);
-  Result := StringReplace(Result, #9, '''#9''', [rfReplaceAll]);
+  // Render as valid Delphi source: apostrophes are doubled inside the quoted
+  // segments, and control characters are emitted as adjacent char-code
+  // literals (#13/#10/#9) because Delphi has no backslash escapes.
+  Result := '';
+  LInQuote := False;
+  for i := 1 to Length(FValue) do
+  begin
+    LCh := FValue[i];
+    if (LCh = #13) or (LCh = #10) or (LCh = #9) then
+    begin
+      if LInQuote then
+      begin
+        Result := Result + '''';
+        LInQuote := False;
+      end;
+      case LCh of
+        #13: Result := Result + '#13';
+        #10: Result := Result + '#10';
+        #9: Result := Result + '#9';
+      end;
+    end
+    else
+    begin
+      if not LInQuote then
+      begin
+        Result := Result + '''';
+        LInQuote := True;
+      end;
+      if LCh = '''' then
+        Result := Result + ''''''
+      else
+        Result := Result + LCh;
+    end;
+  end;
+  if LInQuote then
+    Result := Result + '''';
 end;
 
 function TDLNilExpr.ToSourceText: string;
