@@ -285,7 +285,8 @@ begin
     IsKeyword(kwAutomated) or IsKeyword(kwDispInterface) or
     IsKeyword(kwContains) or IsKeyword(kwRequires) or IsKeyword(kwPackage) or
     IsKeyword(kwString) or
-    IsKeyword(kwNoReturn) or IsKeyword(kwReference);
+    IsKeyword(kwNoReturn) or IsKeyword(kwReference) or
+    IsKeyword(kwAbsolute);
 end;
 
 function TDLDelphiParser.IsSymbol(const ASymbol: string): Boolean;
@@ -1371,8 +1372,18 @@ begin
     LIsRecordConst := False;
     if IsSymbol('(') then
     begin
-      if (Peek(1).Kind = tkSymbol) and (Peek(1).Text = '(') then
-        LIsRecordConst := True // array of records: ( (A: ...); ... )
+      // Array of records: ( (A: ...), (B: ...) ) or ( ( (A: ...) ) ). Skip
+      // the wrapper parens, then a record field (Name:) marks a record.
+      // A plain parenthesized expression ((1) - 1) must not match.
+      LDepth := 0;
+      while (Peek(LDepth + 1).Kind = tkSymbol) and
+            (Peek(LDepth + 1).Text = '(') do
+        Inc(LDepth);
+      if ((Peek(LDepth + 1).Kind = tkIdentifier) or
+          (Peek(LDepth + 1).Kind = tkKeyword)) and
+         (Peek(LDepth + 2).Kind = tkSymbol) and
+         (Peek(LDepth + 2).Text = ':') then
+        LIsRecordConst := True
       else if (Peek(1).Kind = tkSymbol) and (Peek(1).Text = ')') then
         LIsRecordConst := True // empty record value: ()
       else if ((Peek(1).Kind = tkIdentifier) or (Peek(1).Kind = tkKeyword)) and
@@ -2045,13 +2056,21 @@ begin
       Advance; // resynchronise
   end;
   ExpectKeyword(kwEnd);
-  if IsIdentifier and (LowerCase(GetText) = 'align') then
-  begin
-    // "end align 16;" alignment specifier after a record/class type
-    Advance;
-    if GetKind = tkInteger then
+    if IsIdentifier and (LowerCase(GetText) = 'align') then
+    begin
+      // "end align 16;" / "end align(16);" alignment specifier
       Advance;
-  end;
+      if IsSymbol('(') then
+      begin
+        Advance;
+        if GetKind = tkInteger then
+          Advance;
+        if IsSymbol(')') then
+          Advance;
+      end
+      else if GetKind = tkInteger then
+        Advance;
+    end;
   SkipTrailingDeclDirectives;
   Result := LRecord;
 end;
@@ -2140,10 +2159,12 @@ begin
     if IsSymbol(';') then
       Advance; // branch separator
     // Alternate conditional field lists of the same branch:
-    //   3: (A: X); {$ELSE} (B: Y); {$ENDIF}
-    while IsSymbol('(') and TDLTriviaAnalyzer.HasConditionalStart(GetCur) do
+    //   3: (A: X); {$ELSE} (B: Y); {$ENDIF}   or
+    //   1: (A: X); {$ELSE} B: Y); {$ENDIF}   (paren per configuration)
+    while TDLTriviaAnalyzer.HasConditionalStart(GetCur) do
     begin
-      Advance;
+      if IsSymbol('(') then
+        Advance;
       while (GetKind <> tkEOF) and (not IsSymbol(')')) and
             (not IsKeyword(kwEnd)) do
       begin
@@ -2160,6 +2181,10 @@ begin
         Advance;
       if IsSymbol(';') then
         Advance;
+      // Continue only into further {$ELSE}/{$ELSEIF} branches; a fresh
+      // {$IFDEF} would start a new variant branch.
+      if not TDLTriviaAnalyzer.HasConditionalContinuation(GetCur) then
+        Break;
     end;
   end;
   Result := LSection;
@@ -2275,7 +2300,15 @@ begin
     if IsIdentifier and (LowerCase(GetText) = 'align') then
     begin
       Advance;
-      if GetKind = tkInteger then
+      if IsSymbol('(') then
+      begin
+        Advance;
+        if GetKind = tkInteger then
+          Advance;
+        if IsSymbol(')') then
+          Advance;
+      end
+      else if GetKind = tkInteger then
         Advance;
     end;
     SkipTrailingDeclDirectives;
@@ -2732,6 +2765,15 @@ begin
     // Generic class name with a member method: TCls<T>.Method
     ExpandDottedName(LName);
   end;
+  // Generated dual declarations pack the alternate var-typed form after
+  // the name: {$IFDEF X}function{$ENDIF} Name {$IFNDEF X}: function{$ENDIF}(...)
+  // With X active the ': function' / ': procedure' markers are inactive
+  // branches; skip them so the parameters parse normally.
+  if IsSymbol(':') and (IsKwAhead(kwFunction, 1) or IsKwAhead(kwProcedure, 1)) then
+  begin
+    Advance; // ':'
+    Advance; // function/procedure
+  end;
   // Interface-implementation mapping:  function IRef.M = ImplMethod;
   if IsSymbol('=') then
   begin
@@ -3118,7 +3160,9 @@ begin
     Advance;
     if IsKeyword(kwFunction) then
       Advance;
-    LProperty.ReadName := MakeIdentifier;
+    LName := MakeIdentifier;
+    ExpandDottedName(LName); // read u.pFile write u.pFile
+    LProperty.ReadName := LName;
     LProperty.ReadIsFunc := True;
     while TDLTriviaAnalyzer.HasConditionalStart(GetCur) and (IsIdentifier or IsSoftNameKeyword) do
       MakeIdentifier.Free; // alternate branch: read {$IFNDEF X}A{$ELSE}B{$ENDIF}
@@ -3128,7 +3172,9 @@ begin
     Advance;
     if IsKeyword(kwFunction) then
       Advance;
-    LProperty.WriteName := MakeIdentifier;
+    LName := MakeIdentifier;
+    ExpandDottedName(LName);
+    LProperty.WriteName := LName;
     LProperty.WriteIsFunc := True;
     while TDLTriviaAnalyzer.HasConditionalStart(GetCur) and (IsIdentifier or IsSoftNameKeyword) do
       MakeIdentifier.Free;
@@ -3140,7 +3186,9 @@ begin
       Advance;
     if (GetKind = tkIdentifier) then
     begin
-      LProperty.StoredName := MakeIdentifier;
+      LName := MakeIdentifier;
+      ExpandDottedName(LName);
+      LProperty.StoredName := LName;
       LProperty.StoredIsFunc := True;
     end
     else
