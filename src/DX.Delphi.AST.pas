@@ -1054,16 +1054,6 @@ implementation
 
 function DLExprTextOrEmpty(AExpr: TDLExpr): string; forward;
 
-const
-  TDLProgramKindNames: array[TDLProgramKind] of string = ('program', 'unit',
-    'library', 'package');
-  TDLProcKindNames: array[TDLProcKind] of string = ('procedure', 'function',
-    'constructor', 'destructor', 'operator');
-  TDLParamModifierNames: array[TDLParamModifier] of string = ('', 'const', 'var', 'out',
-    'const ref', 'var ref');
-  TDLVisibilityNames: array[TDLVisibility] of string = ('', 'private',
-    'protected', 'public', 'published', 'automated');
-
 { TDLNode }
 
 constructor TDLNode.Create(ASpan: TDLSourceSpan);
@@ -2656,6 +2646,11 @@ end;
 function TDLStringExpr.ToSourceText: string;
 begin
   Result := '''' + StringReplace(FValue, '''', '''''', [rfReplaceAll]) + '''';
+  // Emit valid Delphi source for control characters (char-code literals),
+  // not backslash escapes, which Delphi does not support.
+  Result := StringReplace(Result, #13, '''#13''', [rfReplaceAll]);
+  Result := StringReplace(Result, #10, '''#10''', [rfReplaceAll]);
+  Result := StringReplace(Result, #9, '''#9''', [rfReplaceAll]);
 end;
 
 function TDLNilExpr.ToSourceText: string;
@@ -2671,7 +2666,10 @@ end;
 
 function TDLUnaryExpr.ToSourceText: string;
 begin
-  Result := FOperatorText + FOperand.ToSourceText;
+  if SameText(FOperatorText, 'not') then
+    Result := FOperatorText + ' ' + FOperand.ToSourceText
+  else
+    Result := FOperatorText + FOperand.ToSourceText;
 end;
 
 function TDLCallExpr.ToSourceText: string;
@@ -2714,13 +2712,31 @@ begin
 end;
 
 function TDLSetExpr.ToSourceText: string;
+var
+  i: Integer;
 begin
-  Result := '[set]';
+  Result := '[';
+  for i := 0 to FElements.Count - 1 do
+  begin
+    if i > 0 then
+      Result := Result + ', ';
+    Result := Result + FElements[i].ToSourceText;
+  end;
+  Result := Result + ']';
 end;
 
 function TDLArrayExpr.ToSourceText: string;
+var
+  i: Integer;
 begin
-  Result := '[array]';
+  Result := '[';
+  for i := 0 to FElements.Count - 1 do
+  begin
+    if i > 0 then
+      Result := Result + ', ';
+    Result := Result + FElements[i].ToSourceText;
+  end;
+  Result := Result + ']';
 end;
 
 function TDLInheritedExpr.ToSourceText: string;
@@ -2730,7 +2746,7 @@ end;
 
 function TDLAnonMethodExpr.ToSourceText: string;
 begin
-  Result := '?';
+  Result := '<anonymous method>';
 end;
 
 end.

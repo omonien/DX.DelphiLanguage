@@ -3636,10 +3636,12 @@ end;
 function TDLStringExpr.ToSourceText: string;
 begin
   Result := StringReplace(FValue, '''', '''''', [rfReplaceAll]);
-  Result := StringReplace(Result, #13, '\r', [rfReplaceAll]);
-  Result := StringReplace(Result, #10, '\n', [rfReplaceAll]);
-  Result := StringReplace(Result, #9, '\t', [rfReplaceAll]);
   Result := '''' + Result + '''';
+  // Emit valid Delphi source for control characters (char-code literals),
+  // not backslash escapes, which Delphi does not support.
+  Result := StringReplace(Result, #13, '''#13''', [rfReplaceAll]);
+  Result := StringReplace(Result, #10, '''#10''', [rfReplaceAll]);
+  Result := StringReplace(Result, #9, '''#9''', [rfReplaceAll]);
 end;
 
 function TDLNilExpr.ToSourceText: string;
@@ -3655,7 +3657,10 @@ end;
 
 function TDLUnaryExpr.ToSourceText: string;
 begin
-  Result := FOperatorText + FOperand.ToSourceText;
+  if SameText(FOperatorText, 'not') then
+    Result := FOperatorText + ' ' + FOperand.ToSourceText
+  else
+    Result := FOperatorText + FOperand.ToSourceText;
 end;
 
 function TDLCallExpr.ToSourceText: string;
