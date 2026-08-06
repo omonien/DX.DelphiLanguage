@@ -4033,6 +4033,9 @@ begin
     begin
       // speculative generic instantiation
       LSavePos := FPos;
+      // nil before the try: the finally frees LTypeArgs on the rollback
+      // path, which must never free an uninitialized pointer.
+      LTypeArgs := nil;
       LOk := False;
       Inc(FSuppressCount);
       try
