@@ -45,7 +45,6 @@ type
   private
     FDiagnostics: TDLDiagnostics;
     FSymbols: TDLSymbolTable;
-    function RenderExpr(AExpr: DX.Delphi.CST.TDLExpr): string;
     function RenderTypeName(ATypeExpr: DX.Delphi.CST.TDLTypeExpr): string;
     function BuildTypeDef(ATypeExpr: DX.Delphi.CST.TDLTypeExpr): DX.Delphi.AST.TDLTypeDef;
     function BuildParams(AParams: TList<DX.Delphi.CST.TDLParameter>): TList<DX.Delphi.AST.TDLParam>;
@@ -96,136 +95,6 @@ destructor TDLDelphiAstBuilder.Destroy;
 begin
   FSymbols.Free;
   inherited Destroy;
-end;
-
-function TDLDelphiAstBuilder.RenderExpr(AExpr: DX.Delphi.CST.TDLExpr): string;
-var
-  LBinary: DX.Delphi.CST.TDLBinaryExpr;
-  LUnary: DX.Delphi.CST.TDLUnaryExpr;
-  LCall: DX.Delphi.CST.TDLCallExpr;
-  LMember: DX.Delphi.CST.TDLMemberExpr;
-  LIndex: DX.Delphi.CST.TDLIndexExpr;
-  LGeneric: DX.Delphi.CST.TDLGenericInstantiationExpr;
-  LIdent: DX.Delphi.CST.TDLIdentifierExpr;
-  LNumber: DX.Delphi.CST.TDLNumberExpr;
-  LString: DX.Delphi.CST.TDLStringExpr;
-  LSet: DX.Delphi.CST.TDLSetExpr;
-  LArray: DX.Delphi.CST.TDLArrayExpr;
-  LInherited: DX.Delphi.CST.TDLInheritedExpr;
-  i: Integer;
-begin
-  if AExpr is DX.Delphi.CST.TDLIdentifierExpr then
-  begin
-    LIdent := DX.Delphi.CST.TDLIdentifierExpr(AExpr);
-    Result := LIdent.Name.Name;
-  end
-  else if AExpr is DX.Delphi.CST.TDLNumberExpr then
-  begin
-    LNumber := DX.Delphi.CST.TDLNumberExpr(AExpr);
-    Result := LNumber.Token.Text;
-  end
-  else if AExpr is DX.Delphi.CST.TDLStringExpr then
-  begin
-    LString := DX.Delphi.CST.TDLStringExpr(AExpr);
-    Result := StringReplace(LString.Value, '''', '''''', [rfReplaceAll]);
-    Result := StringReplace(Result, #13, '\r', [rfReplaceAll]);
-    Result := StringReplace(Result, #10, '\n', [rfReplaceAll]);
-    Result := StringReplace(Result, #9, '\t', [rfReplaceAll]);
-    Result := '''' + Result + '''';
-  end
-  else if AExpr is DX.Delphi.CST.TDLNilExpr then
-    Result := 'nil'
-  else if AExpr is DX.Delphi.CST.TDLBinaryExpr then
-  begin
-    LBinary := DX.Delphi.CST.TDLBinaryExpr(AExpr);
-    Result := RenderExpr(LBinary.Left) + ' ' + LBinary.OperatorText + ' ' +
-      RenderExpr(LBinary.Right);
-  end
-  else if AExpr is DX.Delphi.CST.TDLUnaryExpr then
-  begin
-    LUnary := DX.Delphi.CST.TDLUnaryExpr(AExpr);
-    Result := LUnary.OperatorText + RenderExpr(LUnary.Operand);
-  end
-  else if AExpr is DX.Delphi.CST.TDLCallExpr then
-  begin
-    LCall := DX.Delphi.CST.TDLCallExpr(AExpr);
-    Result := RenderExpr(LCall.Callee) + '(';
-    for i := 0 to LCall.Args.Count - 1 do
-    begin
-      if i > 0 then
-        Result := Result + ', ';
-      Result := Result + RenderExpr(LCall.Args[i]);
-    end;
-    Result := Result + ')';
-  end
-  else if AExpr is DX.Delphi.CST.TDLMemberExpr then
-  begin
-    LMember := DX.Delphi.CST.TDLMemberExpr(AExpr);
-    Result := RenderExpr(LMember.Target) + '.' + LMember.Member.Name;
-  end
-  else if AExpr is DX.Delphi.CST.TDLIndexExpr then
-  begin
-    LIndex := DX.Delphi.CST.TDLIndexExpr(AExpr);
-    Result := RenderExpr(LIndex.Target) + '[';
-    for i := 0 to LIndex.Indices.Count - 1 do
-    begin
-      if i > 0 then
-        Result := Result + ', ';
-      Result := Result + RenderExpr(LIndex.Indices[i]);
-    end;
-    Result := Result + ']';
-  end
-  else if AExpr is DX.Delphi.CST.TDLGenericInstantiationExpr then
-  begin
-    LGeneric := DX.Delphi.CST.TDLGenericInstantiationExpr(AExpr);
-    Result := RenderExpr(LGeneric.Target) + '<';
-    for i := 0 to LGeneric.TypeArgs.Count - 1 do
-    begin
-      if i > 0 then
-        Result := Result + ', ';
-      if LGeneric.TypeArgs[i].TypeExpr is DX.Delphi.CST.TDLNamedType then
-        Result := Result + DX.Delphi.CST.TDLNamedType(LGeneric.TypeArgs[i].TypeExpr).Name.Name
-      else
-        Result := Result + '?';
-    end;
-    Result := Result + '>';
-  end
-  else if AExpr is DX.Delphi.CST.TDLSetExpr then
-  begin
-    LSet := DX.Delphi.CST.TDLSetExpr(AExpr);
-    Result := '[';
-    for i := 0 to LSet.Elements.Count - 1 do
-    begin
-      if i > 0 then
-        Result := Result + ', ';
-      Result := Result + RenderExpr(LSet.Elements[i]);
-    end;
-    Result := Result + ']';
-  end
-  else if AExpr is DX.Delphi.CST.TDLArrayExpr then
-  begin
-    LArray := DX.Delphi.CST.TDLArrayExpr(AExpr);
-    Result := '[';
-    for i := 0 to LArray.Elements.Count - 1 do
-    begin
-      if i > 0 then
-        Result := Result + ', ';
-      Result := Result + RenderExpr(LArray.Elements[i]);
-    end;
-    Result := Result + ']';
-  end
-  else if AExpr is DX.Delphi.CST.TDLInheritedExpr then
-  begin
-    LInherited := DX.Delphi.CST.TDLInheritedExpr(AExpr);
-    if LInherited.Target <> nil then
-      Result := 'inherited ' + RenderExpr(LInherited.Target)
-    else
-      Result := 'inherited';
-  end
-  else if AExpr is DX.Delphi.CST.TDLAnonymousMethodExpr then
-    Result := '<anonymous method>'
-  else
-    Result := '?';
 end;
 
 function TDLDelphiAstBuilder.RenderTypeName(ATypeExpr: DX.Delphi.CST.TDLTypeExpr): string;
@@ -310,14 +179,14 @@ begin
   begin
     LSubrange := DX.Delphi.CST.TDLSubrangeType(ATypeExpr);
     Result := DX.Delphi.AST.TDLSubrangeTypeDef.Create(ATypeExpr.Span,
-      RenderExpr(LSubrange.Low), RenderExpr(LSubrange.High));
+      LSubrange.Low.ToSourceText, LSubrange.High.ToSourceText);
   end
   else if ATypeExpr is DX.Delphi.CST.TDLStringType then
   begin
     LStringType := DX.Delphi.CST.TDLStringType(ATypeExpr);
     if LStringType.Length <> nil then
       Result := DX.Delphi.AST.TDLStringTypeDef.Create(ATypeExpr.Span,
-        StrToIntDef(RenderExpr(LStringType.Length), 0))
+        StrToIntDef(LStringType.Length.ToSourceText, 0))
     else
       Result := DX.Delphi.AST.TDLStringTypeDef.Create(ATypeExpr.Span, 0);
   end
@@ -338,7 +207,8 @@ begin
     for LBound in LStatic.Bounds do
     begin
       if LBound.Expr <> nil then
-        DX.Delphi.AST.TDLStaticArrayTypeDef(LDef).Bounds.Add(RenderExpr(LBound.Expr))
+        DX.Delphi.AST.TDLStaticArrayTypeDef(LDef).Bounds.Add(
+          LBound.Expr.ToSourceText)
       else if LBound.TypeExpr <> nil then
         DX.Delphi.AST.TDLStaticArrayTypeDef(LDef).Bounds.Add(
           RenderTypeName(LBound.TypeExpr));
@@ -938,7 +808,7 @@ begin
   for LBranch in ACSTPart.Variants do
   begin
     for LLabel in LBranch.CaseLabels do
-      LPart.Labels.Add(RenderExpr(LLabel));
+      LPart.Labels.Add(LLabel.ToSourceText);
     for LField in LBranch.Fields do
     begin
       LAstField := DX.Delphi.AST.TDLField.Create(LField.Span, vsPublic, False);
@@ -1197,7 +1067,7 @@ begin
         LAstExport := DX.Delphi.AST.TDLExportDecl.Create(LExport.Span,
           LExport.Name.Name);
         if LExport.Index <> nil then
-          LAstExport.Index := RenderExpr(LExport.Index);
+          LAstExport.Index := LExport.Index.ToSourceText;
         if LExport.NameSpec is DX.Delphi.CST.TDLStringExpr then
           LAstExport.ExportName :=
             DX.Delphi.CST.TDLStringExpr(LExport.NameSpec).Value;

@@ -852,6 +852,10 @@ type
 
   /// <summary>Base class of expressions.</summary>
   TDLExpr = class abstract(TDLNode)
+  public
+    /// <summary>Renders this expression as compact source-like text
+    /// (used by dumps).</summary>
+    function ToSourceText: string; virtual; abstract;
   end;
 
   /// <summary>Identifier reference.</summary>
@@ -859,6 +863,7 @@ type
   private
     FName: string;
   public
+    function ToSourceText: string; override;
     constructor Create(ASpan: TDLSourceSpan; const AName: string);
     procedure Dump(ABuilder: TStringBuilder; AIndent: Integer); override;
     property Name: string read FName;
@@ -870,6 +875,7 @@ type
     FValue: string;
     FIsFloat: Boolean;
   public
+    function ToSourceText: string; override;
     constructor Create(ASpan: TDLSourceSpan; const AValue: string;
       AIsFloat: Boolean);
     procedure Dump(ABuilder: TStringBuilder; AIndent: Integer); override;
@@ -882,6 +888,7 @@ type
   private
     FValue: string;
   public
+    function ToSourceText: string; override;
     constructor Create(ASpan: TDLSourceSpan; const AValue: string);
     procedure Dump(ABuilder: TStringBuilder; AIndent: Integer); override;
     property Value: string read FValue;
@@ -890,6 +897,7 @@ type
   /// <summary>nil literal.</summary>
   TDLNilExpr = class(TDLExpr)
   public
+    function ToSourceText: string; override;
     procedure Dump(ABuilder: TStringBuilder; AIndent: Integer); override;
   end;
 
@@ -899,6 +907,7 @@ type
     FElements: TList<TDLExpr>;
     FIsRanges: TList<Boolean>;
   public
+    function ToSourceText: string; override;
     constructor Create(ASpan: TDLSourceSpan);
     destructor Destroy; override;
     procedure Dump(ABuilder: TStringBuilder; AIndent: Integer); override;
@@ -911,6 +920,7 @@ type
   private
     FElements: TList<TDLExpr>;
   public
+    function ToSourceText: string; override;
     constructor Create(ASpan: TDLSourceSpan);
     destructor Destroy; override;
     procedure Dump(ABuilder: TStringBuilder; AIndent: Integer); override;
@@ -925,6 +935,7 @@ type
     FLeft: TDLExpr;
     FRight: TDLExpr;
   public
+    function ToSourceText: string; override;
     constructor Create(ASpan: TDLSourceSpan; AOperator: TDLBinaryOp;
       const AOperatorText: string; ALeft, ARight: TDLExpr);
     destructor Destroy; override;
@@ -942,6 +953,7 @@ type
     FOperatorText: string;
     FOperand: TDLExpr;
   public
+    function ToSourceText: string; override;
     constructor Create(ASpan: TDLSourceSpan; AOperator: TDLUnaryOp;
       const AOperatorText: string; AOperand: TDLExpr);
     destructor Destroy; override;
@@ -957,6 +969,7 @@ type
     FTarget: TDLExpr;
     FIndices: TList<TDLExpr>;
   public
+    function ToSourceText: string; override;
     constructor Create(ASpan: TDLSourceSpan; ATarget: TDLExpr);
     destructor Destroy; override;
     procedure Dump(ABuilder: TStringBuilder; AIndent: Integer); override;
@@ -970,6 +983,7 @@ type
     FCallee: TDLExpr;
     FArgs: TList<TDLExpr>;
   public
+    function ToSourceText: string; override;
     constructor Create(ASpan: TDLSourceSpan; ACallee: TDLExpr);
     destructor Destroy; override;
     procedure Dump(ABuilder: TStringBuilder; AIndent: Integer); override;
@@ -983,6 +997,7 @@ type
     FTarget: TDLExpr;
     FMember: string;
   public
+    function ToSourceText: string; override;
     constructor Create(ASpan: TDLSourceSpan; ATarget: TDLExpr;
       const AMember: string);
     destructor Destroy; override;
@@ -997,6 +1012,7 @@ type
     FTarget: TDLExpr;
     FTypeArgs: TList<string>;
   public
+    function ToSourceText: string; override;
     constructor Create(ASpan: TDLSourceSpan; ATarget: TDLExpr);
     destructor Destroy; override;
     procedure Dump(ABuilder: TStringBuilder; AIndent: Integer); override;
@@ -1009,6 +1025,7 @@ type
   private
     FTarget: TDLExpr;
   public
+    function ToSourceText: string; override;
     constructor Create(ASpan: TDLSourceSpan; ATarget: TDLExpr);
     destructor Destroy; override;
     procedure Dump(ABuilder: TStringBuilder; AIndent: Integer); override;
@@ -1023,6 +1040,7 @@ type
     FReturnType: string;
     FBody: TDLStmt;
   public
+    function ToSourceText: string; override;
     constructor Create(ASpan: TDLSourceSpan; AKind: TDLProcKind);
     destructor Destroy; override;
     procedure Dump(ABuilder: TStringBuilder; AIndent: Integer); override;
@@ -1034,6 +1052,8 @@ type
 
 implementation
 
+function DLExprTextOrEmpty(AExpr: TDLExpr): string; forward;
+
 const
   TDLProgramKindNames: array[TDLProgramKind] of string = ('program', 'unit',
     'library', 'package');
@@ -1043,84 +1063,6 @@ const
     'const ref', 'var ref');
   TDLVisibilityNames: array[TDLVisibility] of string = ('', 'private',
     'protected', 'public', 'published', 'automated');
-
-/// <summary>Renders an AST expression to compact source-like text.</summary>
-function DLExprText(AExpr: TDLExpr): string;
-var
-  LBinary: TDLBinaryExpr;
-  LUnary: TDLUnaryExpr;
-  LCall: TDLCallExpr;
-  LMember: TDLMemberExpr;
-  LIndex: TDLIndexExpr;
-  LGeneric: TDLGenericInstExpr;
-  i: Integer;
-begin
-  if AExpr = nil then
-    Exit('');
-  if AExpr is TDLIdentExpr then
-    Result := TDLIdentExpr(AExpr).Name
-  else if AExpr is TDLNumberExpr then
-    Result := TDLNumberExpr(AExpr).Value
-  else if AExpr is TDLStringExpr then
-    Result := '''' + StringReplace(TDLStringExpr(AExpr).Value, '''', '''''',
-      [rfReplaceAll]) + ''''
-  else if AExpr is TDLNilExpr then
-    Result := 'nil'
-  else if AExpr is TDLBinaryExpr then
-  begin
-    LBinary := TDLBinaryExpr(AExpr);
-    Result := DLExprText(LBinary.Left) + ' ' + LBinary.OperatorText + ' ' +
-      DLExprText(LBinary.Right);
-  end
-  else if AExpr is TDLUnaryExpr then
-  begin
-    LUnary := TDLUnaryExpr(AExpr);
-    Result := LUnary.OperatorText + DLExprText(LUnary.Operand);
-  end
-  else if AExpr is TDLCallExpr then
-  begin
-    LCall := TDLCallExpr(AExpr);
-    Result := DLExprText(LCall.Callee) + '(';
-    for i := 0 to LCall.Args.Count - 1 do
-    begin
-      if i > 0 then
-        Result := Result + ', ';
-      Result := Result + DLExprText(LCall.Args[i]);
-    end;
-    Result := Result + ')';
-  end
-  else if AExpr is TDLMemberExpr then
-  begin
-    LMember := TDLMemberExpr(AExpr);
-    Result := DLExprText(LMember.Target) + '.' + LMember.Member;
-  end
-  else if AExpr is TDLIndexExpr then
-  begin
-    LIndex := TDLIndexExpr(AExpr);
-    Result := DLExprText(LIndex.Target) + '[';
-    for i := 0 to LIndex.Indices.Count - 1 do
-    begin
-      if i > 0 then
-        Result := Result + ', ';
-      Result := Result + DLExprText(LIndex.Indices[i]);
-    end;
-    Result := Result + ']';
-  end
-  else if AExpr is TDLGenericInstExpr then
-  begin
-    LGeneric := TDLGenericInstExpr(AExpr);
-    Result := DLExprText(LGeneric.Target) + '<' +
-      String.Join(', ', LGeneric.TypeArgs.ToArray) + '>';
-  end
-  else if AExpr is TDLSetExpr then
-    Result := '[set]'
-  else if AExpr is TDLArrayExpr then
-    Result := '[array]'
-  else if AExpr is TDLInheritedExpr then
-    Result := 'inherited'
-  else
-    Result := '?';
-end;
 
 { TDLNode }
 
@@ -1363,7 +1305,8 @@ begin
   if FWriteName <> '' then
     TDLDump.Line(ABuilder, AIndent, '  write %s', [FWriteName]);
   if FIsDefault then
-    TDLDump.Line(ABuilder, AIndent, '  default %s', [DLExprText(FDefaultValue)]);
+    TDLDump.Line(ABuilder, AIndent, '  default %s',
+      [DLExprTextOrEmpty(FDefaultValue)]);
 end;
 
 { TDLVariantPart }
@@ -1676,7 +1619,7 @@ procedure TDLParam.Dump(ABuilder: TStringBuilder; AIndent: Integer);
 begin
   DumpHeader(ABuilder, AIndent, '%s %s : %s%s',
     [TDLParamModifierNames[FMode], String.Join(', ', FNames.ToArray), FTypeName,
-     IfThen(FDefault <> nil, ' = ' + DLExprText(FDefault), '')]);
+     IfThen(FDefault <> nil, ' = ' + DLExprTextOrEmpty(FDefault), '')]);
 end;
 
 { TDLTypeDecl }
@@ -1721,7 +1664,7 @@ begin
   DumpHeader(ABuilder, AIndent, 'const %s%s%s',
     [String.Join(', ', FNames.ToArray),
      IfThen(FTypeName <> '', ' : ' + FTypeName, ''),
-     IfThen(FValue <> nil, ' = ' + DLExprText(FValue), '')]);
+     IfThen(FValue <> nil, ' = ' + DLExprTextOrEmpty(FValue), '')]);
 end;
 
 { TDLVarDecl }
@@ -1746,8 +1689,8 @@ begin
   DumpHeader(ABuilder, AIndent, '%s %s : %s%s%s',
     [IfThen(FIsThreadVar, 'threadvar', 'var'),
      String.Join(', ', FNames.ToArray), FTypeName,
-     IfThen(FAbsoluteOf <> nil, ' absolute ' + DLExprText(FAbsoluteOf), ''),
-     IfThen(FInit <> nil, ' = ' + DLExprText(FInit), '')]);
+     IfThen(FAbsoluteOf <> nil, ' absolute ' + DLExprTextOrEmpty(FAbsoluteOf), ''),
+     IfThen(FInit <> nil, ' = ' + DLExprTextOrEmpty(FInit), '')]);
 end;
 
 { TDLLabelDecl }
@@ -2274,7 +2217,7 @@ end;
 procedure TDLVarDeclStmt.Dump(ABuilder: TStringBuilder; AIndent: Integer);
 begin
   DumpHeader(ABuilder, AIndent, 'var %s : %s = %s',
-    [String.Join(', ', FNames.ToArray), FTypeName, DLExprText(FInit)]);
+    [String.Join(', ', FNames.ToArray), FTypeName, DLExprTextOrEmpty(FInit)]);
 end;
 
 { TDLEmptyStmt }
@@ -2684,6 +2627,110 @@ begin
     TDLDump.Line(ABuilder, AIndent, '  : %s', [FReturnType]);
   if FBody <> nil then
     FBody.Dump(ABuilder, AIndent + 1);
+end;
+
+{ ------------------------------------------------------------------ }
+{ Expression source-text rendering                                    }
+{ ------------------------------------------------------------------ }
+
+/// <summary>ToSourceText with nil tolerance (dumps call this for optional
+/// expression fields).</summary>
+function DLExprTextOrEmpty(AExpr: TDLExpr): string;
+begin
+  if AExpr = nil then
+    Result := ''
+  else
+    Result := AExpr.ToSourceText;
+end;
+
+function TDLIdentExpr.ToSourceText: string;
+begin
+  Result := FName;
+end;
+
+function TDLNumberExpr.ToSourceText: string;
+begin
+  Result := FValue;
+end;
+
+function TDLStringExpr.ToSourceText: string;
+begin
+  Result := '''' + StringReplace(FValue, '''', '''''', [rfReplaceAll]) + '''';
+end;
+
+function TDLNilExpr.ToSourceText: string;
+begin
+  Result := 'nil';
+end;
+
+function TDLBinaryExpr.ToSourceText: string;
+begin
+  Result := FLeft.ToSourceText + ' ' + FOperatorText + ' ' +
+    FRight.ToSourceText;
+end;
+
+function TDLUnaryExpr.ToSourceText: string;
+begin
+  Result := FOperatorText + FOperand.ToSourceText;
+end;
+
+function TDLCallExpr.ToSourceText: string;
+var
+  i: Integer;
+begin
+  Result := FCallee.ToSourceText + '(';
+  for i := 0 to FArgs.Count - 1 do
+  begin
+    if i > 0 then
+      Result := Result + ', ';
+    Result := Result + FArgs[i].ToSourceText;
+  end;
+  Result := Result + ')';
+end;
+
+function TDLMemberExpr.ToSourceText: string;
+begin
+  Result := FTarget.ToSourceText + '.' + FMember;
+end;
+
+function TDLIndexExpr.ToSourceText: string;
+var
+  i: Integer;
+begin
+  Result := FTarget.ToSourceText + '[';
+  for i := 0 to FIndices.Count - 1 do
+  begin
+    if i > 0 then
+      Result := Result + ', ';
+    Result := Result + FIndices[i].ToSourceText;
+  end;
+  Result := Result + ']';
+end;
+
+function TDLGenericInstExpr.ToSourceText: string;
+begin
+  Result := FTarget.ToSourceText + '<' +
+    String.Join(', ', FTypeArgs.ToArray) + '>';
+end;
+
+function TDLSetExpr.ToSourceText: string;
+begin
+  Result := '[set]';
+end;
+
+function TDLArrayExpr.ToSourceText: string;
+begin
+  Result := '[array]';
+end;
+
+function TDLInheritedExpr.ToSourceText: string;
+begin
+  Result := 'inherited';
+end;
+
+function TDLAnonMethodExpr.ToSourceText: string;
+begin
+  Result := '?';
 end;
 
 end.
