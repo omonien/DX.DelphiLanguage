@@ -1076,10 +1076,12 @@ begin
       if (LTok.Text = 'begin') or (LTok.Text = 'case') or
          (LTok.Text = 'repeat') or (LTok.Text = 'try') or
          (LTok.Text = 'record') or (LTok.Text = 'object') or
+         (LTok.Text = 'interface') or
          (LTok.Text = 'dispinterface') or
          // 'class' only opens a block when it is not a class-reference
          // ('class of') or a member prefix ('class function/procedure/var/
-         // property/...'), which have no matching 'end'.
+         // property/...'), which have no matching 'end'. 'class helper'
+         // DOES open a block ('... end').
          ((LTok.Text = 'class') and not
           ((Peek(i + 1).Kind = tkKeyword) and
             ((Peek(i + 1).Text = 'of') or (Peek(i + 1).Text = 'function') or
@@ -1088,8 +1090,7 @@ begin
              (Peek(i + 1).Text = 'const') or (Peek(i + 1).Text = 'property') or
              (Peek(i + 1).Text = 'operator') or
              (Peek(i + 1).Text = 'constructor') or
-             (Peek(i + 1).Text = 'destructor') or
-             (Peek(i + 1).Text = 'helper')))) then
+             (Peek(i + 1).Text = 'destructor')))) then
         Inc(LStmtDepth)
       else if (LTok.Text = 'end') or (LTok.Text = 'until') then
         Dec(LStmtDepth);

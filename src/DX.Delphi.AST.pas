@@ -2694,8 +2694,12 @@ end;
 
 function TDLBinaryExpr.ToSourceText: string;
 begin
-  Result := FLeft.ToSourceText + ' ' + FOperatorText + ' ' +
-    FRight.ToSourceText;
+  if FOperatorText = '..' then
+    // Range expressions render compactly (set constructors, subranges).
+    Result := FLeft.ToSourceText + '..' + FRight.ToSourceText
+  else
+    Result := FLeft.ToSourceText + ' ' + FOperatorText + ' ' +
+      FRight.ToSourceText;
 end;
 
 function TDLUnaryExpr.ToSourceText: string;
@@ -2775,7 +2779,10 @@ end;
 
 function TDLInheritedExpr.ToSourceText: string;
 begin
-  Result := 'inherited';
+  if FTarget <> nil then
+    Result := 'inherited ' + FTarget.ToSourceText
+  else
+    Result := 'inherited';
 end;
 
 function TDLAnonMethodExpr.ToSourceText: string;

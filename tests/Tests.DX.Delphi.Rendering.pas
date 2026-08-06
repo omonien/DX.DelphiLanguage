@@ -177,10 +177,25 @@ begin
     finally
       LUnit.Free;
     end;
+    // Range elements render compactly: [1..3] not [1 .. 3].
+    LUnit := CstProcedure('x := [1..3, 5];'#13#10, LDiagnostics);
+    try
+      Assert.AreEqual('[1..3, 5]', CstAssignmentValue(LUnit, 0).ToSourceText);
+    finally
+      LUnit.Free;
+    end;
     LUnit := CstProcedure(
       'f := function: Integer begin Result := 1; end;'#13#10, LDiagnostics);
     try
       Assert.AreEqual('<anonymous method>',
+        CstAssignmentValue(LUnit, 0).ToSourceText);
+    finally
+      LUnit.Free;
+    end;
+    // inherited with a target renders the target.
+    LUnit := CstProcedure('x := inherited Foo(1);'#13#10, LDiagnostics);
+    try
+      Assert.AreEqual('inherited Foo(1)',
         CstAssignmentValue(LUnit, 0).ToSourceText);
     finally
       LUnit.Free;
@@ -225,6 +240,19 @@ begin
     LModule := AstProcedure('x := [1, 2];'#13#10, LDiagnostics);
     try
       Assert.AreEqual('[1, 2]', AstAssignmentValue(LModule, 0).ToSourceText);
+    finally
+      LModule.Free;
+    end;
+    LModule := AstProcedure('x := [1..3];'#13#10, LDiagnostics);
+    try
+      Assert.AreEqual('[1..3]', AstAssignmentValue(LModule, 0).ToSourceText);
+    finally
+      LModule.Free;
+    end;
+    LModule := AstProcedure('x := inherited Foo;'#13#10, LDiagnostics);
+    try
+      Assert.AreEqual('inherited Foo',
+        AstAssignmentValue(LModule, 0).ToSourceText);
     finally
       LModule.Free;
     end;
