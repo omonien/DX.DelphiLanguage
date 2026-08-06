@@ -4387,7 +4387,13 @@ end;
 function TDLDelphiParser.Parse: TDLCompilationUnit;
 begin
   DLResetNodeCount;
-  Result := ParseCompilationUnit;
+  try
+    Result := ParseCompilationUnit;
+  finally
+    // Release the per-thread context string after the parse session ends
+    // (managed threadvar strings are not auto-finalized at thread exit).
+    DLResetNodeCount;
+  end;
 end;
 
 end.

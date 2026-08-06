@@ -45,6 +45,7 @@ type
   private
     FDiagnostics: TDLDiagnostics;
     FSymbols: TDLSymbolTable;
+    function RenderExprOrEmpty(AExpr: DX.Delphi.CST.TDLExpr): string;
     function RenderTypeName(ATypeExpr: DX.Delphi.CST.TDLTypeExpr): string;
     function BuildTypeDef(ATypeExpr: DX.Delphi.CST.TDLTypeExpr): DX.Delphi.AST.TDLTypeDef;
     function BuildParams(AParams: TList<DX.Delphi.CST.TDLParameter>): TList<DX.Delphi.AST.TDLParam>;
@@ -83,6 +84,15 @@ uses
   System.StrUtils;
 
 { TDLDelphiAstBuilder }
+
+function TDLDelphiAstBuilder.RenderExprOrEmpty(
+  AExpr: DX.Delphi.CST.TDLExpr): string;
+begin
+  if AExpr = nil then
+    Result := ''
+  else
+    Result := AExpr.ToSourceText;
+end;
 
 constructor TDLDelphiAstBuilder.Create(ADiagnostics: TDLDiagnostics);
 begin
@@ -179,7 +189,7 @@ begin
   begin
     LSubrange := DX.Delphi.CST.TDLSubrangeType(ATypeExpr);
     Result := DX.Delphi.AST.TDLSubrangeTypeDef.Create(ATypeExpr.Span,
-      LSubrange.Low.ToSourceText, LSubrange.High.ToSourceText);
+      RenderExprOrEmpty(LSubrange.Low), RenderExprOrEmpty(LSubrange.High));
   end
   else if ATypeExpr is DX.Delphi.CST.TDLStringType then
   begin
