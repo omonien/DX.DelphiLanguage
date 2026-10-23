@@ -1,7 +1,8 @@
 ﻿/// <summary>
 ///   Tests.DX.Delphi.Lexer.Dcc32 — lexer tests that pin what dcc32 and
 ///   dcc64 37.0 do, from files in the Delphi 13 RTL that the lexer misread:
-///   comments don't nest (System.ZLib).
+///   comments don't nest (System.ZLib), and asm's Intel-style hex numbers
+///   (System.pas, CMP BYTE PTR [ECX],0EBH).
 /// </summary>
 /// <remarks>
 ///   Checked on dcc32 and dcc64 37.0: "{ a { b } X" compiles X, "(* c (* d *) X"
@@ -35,6 +36,16 @@ type
     procedure ParenCommentHoldingDirectives;
   end;
 
+  [TestFixture]
+  TTestLexerDcc32AsmNumbers = class
+  public
+    [Test]
+    procedure IntelHexUpperSuffix;
+    [Test]
+    procedure IntelHexLowerSuffix;
+    [Test]
+    procedure ExponentStillFloat;
+  end;
 
 implementation
 
@@ -104,7 +115,38 @@ begin
   Assert.AreEqual('x', LText);
 end;
 
+procedure TTestLexerDcc32AsmNumbers.IntelHexUpperSuffix;
+var
+  LText: string; LKind: TDLTokenKind; LValue: Int64; LCount: Integer;
+begin
+  Lex('0EBH', LText, LKind, LValue, LCount);
+  Assert.AreEqual(0, LCount);
+  Assert.AreEqual(Ord(tkInteger), Ord(LKind));
+  Assert.AreEqual(Int64($EB), LValue);
+end;
+
+procedure TTestLexerDcc32AsmNumbers.IntelHexLowerSuffix;
+var
+  LText: string; LKind: TDLTokenKind; LValue: Int64; LCount: Integer;
+begin
+  Lex('0ffh', LText, LKind, LValue, LCount);
+  Assert.AreEqual(0, LCount);
+  Assert.AreEqual(Ord(tkInteger), Ord(LKind));
+  Assert.AreEqual(Int64(255), LValue);
+end;
+
+// 1E5 has no H after it: still a float
+procedure TTestLexerDcc32AsmNumbers.ExponentStillFloat;
+var
+  LText: string; LKind: TDLTokenKind; LValue: Int64; LCount: Integer;
+begin
+  Lex('1E5', LText, LKind, LValue, LCount);
+  Assert.AreEqual(0, LCount);
+  Assert.AreEqual(Ord(tkFloat), Ord(LKind));
+end;
+
 initialization
   TDUnitX.RegisterTestFixture(TTestLexerDcc32Comments);
+  TDUnitX.RegisterTestFixture(TTestLexerDcc32AsmNumbers);
 
 end.

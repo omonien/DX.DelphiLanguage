@@ -427,6 +427,7 @@ var
   LToken: TDLToken;
   LDigits: string;
   LIsFloat: Boolean;
+  LEnd: Integer;
 begin
   LStart := GetCurrentPos;
   LIsFloat := False;
@@ -470,6 +471,33 @@ begin
     except
       on E: EConvertError do
         FDiagnostics.Error('DLX-05', 'Invalid binary literal "' + LDigits + '"',
+          LToken.Span);
+    end;
+    Exit;
+  end;
+  // Intel-style hexadecimal in asm blocks: a digit, hex digits, then H
+  // (0EBH, 0FFh). In Pascal code this spelling is an error anyway, so reading
+  // it as hex everywhere costs nothing.
+  LEnd := FOffset;
+  while CharInSet(GetCharAt(LEnd), ['0'..'9', 'A'..'F', 'a'..'f']) do
+    Inc(LEnd);
+  if (LEnd > FOffset) and CharInSet(GetCharAt(LEnd), ['H', 'h']) and
+     not (CharInSet(GetCharAt(LEnd + 1), ['_', '0'..'9']) or GetCharAt(LEnd + 1).IsLetter) then
+  begin
+    LDigits := '';
+    while FOffset < LEnd do
+    begin
+      LDigits := LDigits + GetCurChar;
+      Advance;
+    end;
+    Advance; // 'H'
+    AddToken(tkInteger, LStart);
+    LToken := FTokens.Last;
+    try
+      LToken.IntegerValue := StrToInt64('$' + LDigits);
+    except
+      on E: EConvertError do
+        FDiagnostics.Error('DLX-04', 'Invalid hexadecimal literal "' + LDigits + 'H"',
           LToken.Span);
     end;
     Exit;
