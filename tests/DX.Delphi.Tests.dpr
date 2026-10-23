@@ -27,6 +27,7 @@ uses
   Tests.DX.Delphi.Core in 'Tests.DX.Delphi.Core.pas',
   Tests.DX.Delphi.Lexer in 'Tests.DX.Delphi.Lexer.pas',
   Tests.DX.Delphi.Lexer.Advanced in 'Tests.DX.Delphi.Lexer.Advanced.pas',
+  Tests.DX.Delphi.Lexer.Dcc32 in 'Tests.DX.Delphi.Lexer.Dcc32.pas',
   Tests.DX.Delphi.Parser in 'Tests.DX.Delphi.Parser.pas',
   Tests.DX.Delphi.Parser.Types in 'Tests.DX.Delphi.Parser.Types.pas',
   Tests.DX.Delphi.Parser.Members in 'Tests.DX.Delphi.Parser.Members.pas',

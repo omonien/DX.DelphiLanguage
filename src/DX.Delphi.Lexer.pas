@@ -316,46 +316,38 @@ end;
 procedure TDLDelphiLexer.ScanBlockComment(AStartPos: TDLSourcePos;
   AKind: TDLTriviaKind);
 var
-  LDepth: Integer;
+  LClosed: Boolean;
   LIsParenStyle: Boolean;
 begin
+  // Delphi does not nest comments: a { } comment ends at the first '}', a
+  // (* *) comment at the first '*)', whatever they contain (dcc32 and dcc64
+  // 37.0: "{ a { b } X" compiles X). A '{' or '(*' inside is plain text, so
+  // System.ZLib's (* ... *) blocks holding {$IFDEF ...} close where dcc32
+  // closes them.
   LIsParenStyle := GetCurChar = '(';
   Advance; // '{' or '('
   if LIsParenStyle then
     Advance; // '*'
-  LDepth := 1;
-  while (GetCurChar <> #0) and (LDepth > 0) do
+  LClosed := False;
+  while GetCurChar <> #0 do
   begin
     if LIsParenStyle and (GetCurChar = '*') and (GetCharAt(FOffset + 1) = ')') then
     begin
       Advance;
       Advance;
-      Dec(LDepth);
-    end
-    else if LIsParenStyle and (GetCurChar = '(') and
-            (GetCharAt(FOffset + 1) = '*') then
-    begin
-      // nested (* ... *) comment
-      Advance;
-      Advance;
-      Inc(LDepth);
-    end
-    else if (not LIsParenStyle) and (GetCurChar = '{') then
-    begin
-      // '{' inside a { } comment: nested comment. '{' is also the end marker
-      // only via '}', so a plain '{' simply deepens.
-      Advance;
-      Inc(LDepth);
+      LClosed := True;
+      Break;
     end
     else if (not LIsParenStyle) and (GetCurChar = '}') then
     begin
       Advance;
-      Dec(LDepth);
+      LClosed := True;
+      Break;
     end
     else
       Advance;
   end;
-  if LDepth > 0 then
+  if not LClosed then
     FDiagnostics.Error('DLX-02', 'Unterminated block comment',
       TDLSourceSpan.Create(AStartPos, GetCurrentPos));
   AddTrivia(AKind, AStartPos);
