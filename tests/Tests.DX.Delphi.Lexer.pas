@@ -413,18 +413,18 @@ var
   LDiagnostics: TDLDiagnostics;
   LTokens: TArray<TDLToken>;
 begin
-  // dcc ends a { } comment at the first '}', so the inner brace is text.
+  // dcc ends a { } comment at the first '}'. Text after that closer is
+  // real source. There is no second '}' left over (that token is DLX-01).
   LDiagnostics := TDLDiagnostics.Create;
   try
-    LTokens := TokenizeToArray('{ outer { inner } still } x', LDiagnostics);
+    LTokens := TokenizeToArray('{ outer { inner } still x', LDiagnostics);
     Assert.AreEqual(0, LDiagnostics.Count);
-    Assert.AreEqual(4, Length(LTokens));
+    Assert.AreEqual(3, Length(LTokens));
     Assert.AreEqual('still', LTokens[0].Text);
     Assert.AreEqual(2, LTokens[0].LeadingTrivia.Count);
     Assert.AreEqual(trBlockComment, LTokens[0].LeadingTrivia[0].Kind);
     Assert.AreEqual('{ outer { inner }', LTokens[0].LeadingTrivia[0].Text);
-    Assert.AreEqual('}', LTokens[1].Text);
-    Assert.AreEqual('x', LTokens[2].Text);
+    Assert.AreEqual('x', LTokens[1].Text);
   finally
     LDiagnostics.Free;
   end;

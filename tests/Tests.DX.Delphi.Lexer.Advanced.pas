@@ -191,18 +191,17 @@ var
   LDiagnostics: TDLDiagnostics;
   LTokens: TArray<TDLToken>;
 begin
-  // dcc ends a (* *) comment at the first '*)'.
+  // dcc ends a (* *) comment at the first '*)'. Text after that closer
+  // is real source, with no leftover '* )' delimiter.
   LDiagnostics := TDLDiagnostics.Create;
   try
-    LTokens := TokenizeToArray('(* outer (* inner *) done *) x', LDiagnostics);
+    LTokens := TokenizeToArray('(* outer (* inner *) done x', LDiagnostics);
     Assert.AreEqual(0, LDiagnostics.Count);
-    Assert.AreEqual(5, Length(LTokens));
+    Assert.AreEqual(3, Length(LTokens));
     Assert.AreEqual('done', LTokens[0].Text);
     Assert.AreEqual(trBlockComment, LTokens[0].LeadingTrivia[0].Kind);
     Assert.AreEqual('(* outer (* inner *)', LTokens[0].LeadingTrivia[0].Text);
-    Assert.AreEqual('*', LTokens[1].Text);
-    Assert.AreEqual(')', LTokens[2].Text);
-    Assert.AreEqual('x', LTokens[3].Text);
+    Assert.AreEqual('x', LTokens[1].Text);
   finally
     LDiagnostics.Free;
   end;

@@ -25,6 +25,17 @@
         <DCC_UsePackage>rtl</DCC_UsePackage>
         <SanitizedProjectName>DX.Delphi.Tests</SanitizedProjectName>
     </PropertyGroup>
+    <PropertyGroup Condition="'$(Base_Win64)'=='' and '$(Base)'=='true' and '$(Platform)'=='Win64'">
+        <Base_Win64>true</Base_Win64>
+        <Platform>Win64</Platform>
+        <ProjectVersion>19.6</ProjectVersion>
+        <DCC_Namespace>System;Xml;Data;Datasnap;Web;Soap;DX.Delphi</DCC_Namespace>
+        <DCC_UnitSearchPath>..\src;..\libs\DUnitX\Source</DCC_UnitSearchPath>
+        <DCC_OutputUnitDir>..\build\$(Platform)\$(Config)\dcu</DCC_OutputUnitDir>
+        <DCC_OutputFile>..\build\$(Platform)\$(Config)\DX.Delphi.Tests.exe</DCC_OutputFile>
+        <DCC_UsePackage>rtl</DCC_UsePackage>
+        <SanitizedProjectName>DX.Delphi.Tests</SanitizedProjectName>
+    </PropertyGroup>
     <PropertyGroup Condition="'$(Cfg_1)'!=''">
         <Cfg_1>true</Cfg_1>
         <Cfg_2>false</Cfg_2>
@@ -45,6 +56,15 @@
         <DCC_OutputFile>..\build\$(Platform)\$(Config)\DX.Delphi.Tests.exe</DCC_OutputFile>
         <SanitizedProjectName>DX.Delphi.Tests</SanitizedProjectName>
     </PropertyGroup>
+    <PropertyGroup Condition="'$(Cfg_1_Win64)'=='' and '$(Cfg_1)'=='true' and '$(Platform)'=='Win64'">
+        <Cfg_1_Win64>true</Cfg_1_Win64>
+        <Platform>Win64</Platform>
+        <DCC_UnitSearchPath>..\src;..\libs\DUnitX\Source</DCC_UnitSearchPath>
+        <DCC_Namespace>System;Xml;Data;Datasnap;Web;Soap;DX.Delphi</DCC_Namespace>
+        <DCC_OutputUnitDir>..\build\$(Platform)\$(Config)\dcu</DCC_OutputUnitDir>
+        <DCC_OutputFile>..\build\$(Platform)\$(Config)\DX.Delphi.Tests.exe</DCC_OutputFile>
+        <SanitizedProjectName>DX.Delphi.Tests</SanitizedProjectName>
+    </PropertyGroup>
     <PropertyGroup Condition="'$(Cfg_2)'!=''">
         <Cfg_2>true</Cfg_2>
         <Cfg_1>false</Cfg_1>
@@ -58,6 +78,15 @@
     <PropertyGroup Condition="'$(Cfg_2_Win32)'=='' and '$(Cfg_2)'=='true' and '$(Platform)'=='Win32'">
         <Cfg_2_Win32>true</Cfg_2_Win32>
         <Platform>Win32</Platform>
+        <DCC_UnitSearchPath>..\src;..\libs\DUnitX\Source</DCC_UnitSearchPath>
+        <DCC_Namespace>System;Xml;Data;Datasnap;Web;Soap;DX.Delphi</DCC_Namespace>
+        <DCC_OutputUnitDir>..\build\$(Platform)\$(Config)\dcu</DCC_OutputUnitDir>
+        <DCC_OutputFile>..\build\$(Platform)\$(Config)\DX.Delphi.Tests.exe</DCC_OutputFile>
+        <SanitizedProjectName>DX.Delphi.Tests</SanitizedProjectName>
+    </PropertyGroup>
+    <PropertyGroup Condition="'$(Cfg_2_Win64)'=='' and '$(Cfg_2)'=='true' and '$(Platform)'=='Win64'">
+        <Cfg_2_Win64>true</Cfg_2_Win64>
+        <Platform>Win64</Platform>
         <DCC_UnitSearchPath>..\src;..\libs\DUnitX\Source</DCC_UnitSearchPath>
         <DCC_Namespace>System;Xml;Data;Datasnap;Web;Soap;DX.Delphi</DCC_Namespace>
         <DCC_OutputUnitDir>..\build\$(Platform)\$(Config)\dcu</DCC_OutputUnitDir>

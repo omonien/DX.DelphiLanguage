@@ -165,7 +165,7 @@ begin
       Assert.IsTrue(LToken <> nil, 'missing token ' + AText);
       Assert.AreEqual(Ord(AKind), Ord(LToken.Kind));
       if AKind = tkInteger then
-        Assert.AreEqual(AValue, LToken.IntegerValue);
+        Assert.AreEqual<Int64>(AValue, LToken.IntegerValue);
     finally
       LTokens.Free;
     end;
@@ -225,9 +225,9 @@ begin
       Assert.AreEqual(7, LTokens.Count);
       Assert.AreEqual('10H', LTokens[2].Text);
       Assert.AreEqual(Ord(tkInteger), Ord(LTokens[2].Kind));
-      Assert.AreEqual(Int64(16), LTokens[2].IntegerValue);
+      Assert.AreEqual<Int64>(16, LTokens[2].IntegerValue);
       Assert.AreEqual('10', LTokens[4].Text);
-      Assert.AreEqual(Int64(10), LTokens[4].IntegerValue);
+      Assert.AreEqual<Int64>(10, LTokens[4].IntegerValue);
       Assert.AreEqual('H', LTokens[5].Text);
       Assert.AreEqual(Ord(tkIdentifier), Ord(LTokens[5].Kind));
     finally
@@ -256,7 +256,7 @@ begin
       Assert.AreEqual(0, LDiagnostics.Count);
       Assert.AreEqual('1010', LTokens[0].Text);
       Assert.AreEqual(Ord(tkInteger), Ord(LTokens[0].Kind));
-      Assert.AreEqual(Int64(1010), LTokens[0].IntegerValue);
+      Assert.AreEqual<Int64>(1010, LTokens[0].IntegerValue);
       Assert.AreEqual('B', LTokens[1].Text);
       Assert.AreEqual(Ord(tkIdentifier), Ord(LTokens[1].Kind));
     finally
@@ -284,7 +284,7 @@ begin
     try
       Assert.AreEqual(0, LDiagnostics.Count);
       Assert.AreEqual('10', LTokens[0].Text);
-      Assert.AreEqual(Int64(10), LTokens[0].IntegerValue);
+      Assert.AreEqual<Int64>(10, LTokens[0].IntegerValue);
       Assert.AreEqual('O', LTokens[1].Text);
       Assert.AreEqual(Ord(tkIdentifier), Ord(LTokens[1].Kind));
     finally
@@ -344,11 +344,11 @@ begin
     try
       Assert.AreEqual(0, LDiagnostics.Count);
       Assert.AreEqual('2', LTokens[1].Text);
-      Assert.AreEqual(Int64(2), LTokens[1].IntegerValue);
+      Assert.AreEqual<Int64>(2, LTokens[1].IntegerValue);
       Assert.AreEqual('B', LTokens[2].Text);
       Assert.AreEqual(Ord(tkIdentifier), Ord(LTokens[2].Kind));
       Assert.AreEqual('1010', LTokens[3].Text);
-      Assert.AreEqual(Int64(1010), LTokens[3].IntegerValue);
+      Assert.AreEqual<Int64>(1010, LTokens[3].IntegerValue);
       Assert.AreEqual('BYTE', LTokens[4].Text);
       Assert.AreEqual(Ord(tkIdentifier), Ord(LTokens[4].Kind));
     finally
