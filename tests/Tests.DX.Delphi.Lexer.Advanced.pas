@@ -1,6 +1,6 @@
 ﻿/// <summary>
 ///   Tests.DX.Delphi.Lexer.Advanced — additional DUnitX lexer coverage:
-///   operators, directives, nested comment styles, line counting, error
+///   operators, directives, block comments (they do not nest), line counting, error
 ///   codes and multiline-string edge cases.
 /// </summary>
 /// <author>Olaf Monien</author>
@@ -191,11 +191,18 @@ var
   LDiagnostics: TDLDiagnostics;
   LTokens: TArray<TDLToken>;
 begin
+  // dcc ends a (* *) comment at the first '*)'.
   LDiagnostics := TDLDiagnostics.Create;
   try
     LTokens := TokenizeToArray('(* outer (* inner *) done *) x', LDiagnostics);
     Assert.AreEqual(0, LDiagnostics.Count);
-    Assert.AreEqual(2, Length(LTokens));
+    Assert.AreEqual(5, Length(LTokens));
+    Assert.AreEqual('done', LTokens[0].Text);
+    Assert.AreEqual(trBlockComment, LTokens[0].LeadingTrivia[0].Kind);
+    Assert.AreEqual('(* outer (* inner *)', LTokens[0].LeadingTrivia[0].Text);
+    Assert.AreEqual('*', LTokens[1].Text);
+    Assert.AreEqual(')', LTokens[2].Text);
+    Assert.AreEqual('x', LTokens[3].Text);
   finally
     LDiagnostics.Free;
   end;

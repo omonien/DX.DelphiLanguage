@@ -361,14 +361,18 @@ var
   LDiagnostics: TDLDiagnostics;
   LTokens: TArray<TDLToken>;
 begin
+  // dcc ends a { } comment at the first '}', so the inner brace is text.
   LDiagnostics := TDLDiagnostics.Create;
   try
     LTokens := TokenizeToArray('{ outer { inner } still } x', LDiagnostics);
     Assert.AreEqual(0, LDiagnostics.Count);
-    Assert.AreEqual(2, Length(LTokens));
-    Assert.AreEqual('x', LTokens[0].Text);
+    Assert.AreEqual(4, Length(LTokens));
+    Assert.AreEqual('still', LTokens[0].Text);
     Assert.AreEqual(2, LTokens[0].LeadingTrivia.Count);
     Assert.AreEqual(trBlockComment, LTokens[0].LeadingTrivia[0].Kind);
+    Assert.AreEqual('{ outer { inner }', LTokens[0].LeadingTrivia[0].Text);
+    Assert.AreEqual('}', LTokens[1].Text);
+    Assert.AreEqual('x', LTokens[2].Text);
   finally
     LDiagnostics.Free;
   end;

@@ -42,7 +42,7 @@ The CST is a **full-fidelity parse tree**: it mirrors the grammar of Delphi
 almost one-to-one and preserves everything a tokenizer can see:
 
 - **Exact source spans** on every node (`line:col` of first and last token).
-- **Trivia** — whitespace, `//` and nested `{ }` / `(* *)` comments, and
+- **Trivia:** whitespace, `//` and `{ }` / `(* *)` comments (these do not nest), and
   `{$...}` compiler directives — attached to the nodes that own them.
 - **Token-level layout**: every identifier, literal and operator symbol is
   represented, including `&`-escaped identifiers and the original literal
@@ -224,7 +224,7 @@ anonymous method expressions (`procedure`/`function`/`reference to`).
 **Lexer:** case-insensitive keywords, `&`-escaped identifiers, Unicode
 identifiers, multiline strings `'''…'''` (with the empirically verified
 quote-run rules), `#` char codes (decimal/hex/binary), integers
-(dec/`$`hex/`%`binary) with `_` separators, floats, nested block comments,
+(dec/`$`hex/`%`binary, plus `H`/`B`/`O` suffixes inside `asm`) with `_` separators, floats, block comments that do not nest,
 `//` comments, `{$...}` directives.
 
 ---
