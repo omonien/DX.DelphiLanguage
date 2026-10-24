@@ -42,6 +42,8 @@ type
     procedure UnderscoreSeparators;
     [Test]
     procedure Floats;
+    [Test]
+    procedure DigitSeparatorsInFloats;
   end;
 
   [TestFixture]
@@ -55,6 +57,8 @@ type
     procedure MultilineString;
     [Test]
     procedure MultilineStringQuoteRun;
+    [Test]
+    procedure DigitSeparatorsInCharCodes;
   end;
 
   [TestFixture]
@@ -262,6 +266,35 @@ begin
   end;
 end;
 
+procedure TTestLexerNumbers.DigitSeparatorsInFloats;
+var
+  LDiagnostics: TDLDiagnostics;
+  LTokens: TArray<TDLToken>;
+begin
+  // Delphi 11 ignores '_' inside a numeric literal, including the fraction
+  // and the exponent. 1_0..2_0 must stay a range, not a float.
+  LDiagnostics := TDLDiagnostics.Create;
+  try
+    LTokens := TokenizeToArray('1_000.25 6.022_140e23 1.5e1_0 1_0..2_0',
+      LDiagnostics);
+    Assert.AreEqual(0, LDiagnostics.Count);
+    Assert.AreEqual(tkFloat, LTokens[0].Kind);
+    Assert.AreEqual<Double>(1000.25, LTokens[0].FloatValue);
+    Assert.AreEqual(tkFloat, LTokens[1].Kind);
+    Assert.AreEqual<Double>(
+      StrToFloat('6.022140E23', TFormatSettings.Invariant),
+      LTokens[1].FloatValue);
+    Assert.AreEqual(tkFloat, LTokens[2].Kind);
+    Assert.AreEqual<Double>(1.5e10, LTokens[2].FloatValue);
+    Assert.AreEqual(tkInteger, LTokens[3].Kind);
+    Assert.AreEqual<Int64>(10, LTokens[3].IntegerValue);
+    Assert.AreEqual('..', LTokens[4].Text);
+    Assert.AreEqual<Int64>(20, LTokens[5].IntegerValue);
+  finally
+    LDiagnostics.Free;
+  end;
+end;
+
 { TTestLexerStrings }
 
 procedure TTestLexerStrings.SingleQuotedWithEscapes;
@@ -331,6 +364,25 @@ begin
     LTokens := TokenizeToArray(LSource, LDiagnostics);
     Assert.AreEqual(tkString, LTokens[0].Kind);
     Assert.AreEqual('it''''s', LTokens[0].Value);
+  finally
+    LDiagnostics.Free;
+  end;
+end;
+
+procedure TTestLexerStrings.DigitSeparatorsInCharCodes;
+var
+  LDiagnostics: TDLDiagnostics;
+  LTokens: TArray<TDLToken>;
+begin
+  LDiagnostics := TDLDiagnostics.Create;
+  try
+    LTokens := TokenizeToArray('#6_5#$4_1#%100_0001', LDiagnostics);
+    Assert.AreEqual(0, LDiagnostics.Count);
+    Assert.AreEqual(4, Length(LTokens));
+    Assert.AreEqual(tkCharCode, LTokens[0].Kind);
+    Assert.AreEqual('A', LTokens[0].Value);
+    Assert.AreEqual('A', LTokens[1].Value);
+    Assert.AreEqual('A', LTokens[2].Value);
   finally
     LDiagnostics.Free;
   end;

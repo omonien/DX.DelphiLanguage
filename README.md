@@ -223,8 +223,8 @@ anonymous method expressions (`procedure`/`function`/`reference to`).
 
 **Lexer:** case-insensitive keywords, `&`-escaped identifiers, Unicode
 identifiers, multiline strings `'''…'''` (with the empirically verified
-quote-run rules), `#` char codes (decimal/hex/binary), integers
-(dec/`$`hex/`%`binary, plus `H`/`B`/`O` suffixes inside `asm`) with `_` separators, floats, block comments that do not nest,
+quote-run rules), `#` char codes (decimal/hex/binary, `_` separators), integers
+(dec/`$`hex/`%`binary, plus `H`/`B`/`O` suffixes inside `asm`) with `_` separators, floats (including the exponent), block comments that do not nest,
 `//` comments, `{$...}` directives.
 
 ---

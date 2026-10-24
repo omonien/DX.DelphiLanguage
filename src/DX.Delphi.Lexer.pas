@@ -11,12 +11,14 @@
 ///
 ///   Supported surface:
 ///     - case-insensitive keywords, &-escaped identifiers, Unicode identifiers
-///     - single-quoted strings with '' escaping, #code char-code sequences
+///     - single-quoted strings with '' escaping, # char codes
+///       (decimal / $hex / %binary, '_' separators)
 ///     - Delphi 12+ multiline strings '''...''' (empirically verified rules:
 ///       an even run of quotes inside yields run/2 literal quotes; a run of
 ///       exactly three closes the string; odd runs > 3 are an error)
 ///     - integers (dec / $hex / %binary) with _ separators, floats with
-///       mantissa/exponent; inside asm, H/B/O numeric suffixes
+///       mantissa/exponent ('_' is ignored there too); inside asm, H/B/O
+///       numeric suffixes
 ///     - block comments { ... } and (* ... *) do not nest, // line comments,
 ///       {$...} directives (kept as trivia; conditional compilation is NOT
 ///       evaluated)
@@ -628,9 +630,12 @@ begin
       LDigits := LDigits + GetCurChar;
       Advance;
     end;
-    while CharInSet(GetCurChar, ['0'..'9']) do
+    // Delphi 11 ignores '_' in numeric literals. The mantissa already does;
+    // the exponent does too (1.5e1_0).
+    while CharInSet(GetCurChar, ['0'..'9', '_']) do
     begin
-      LDigits := LDigits + GetCurChar;
+      if GetCurChar <> '_' then
+        LDigits := LDigits + GetCurChar;
       Advance;
     end;
   end;
@@ -804,9 +809,11 @@ begin
   begin
     LDigits := '$';
     Advance;
-    while CharInSet(GetCurChar, ['0'..'9', 'A'..'F', 'a'..'f']) do
+    // Digit separators (Delphi 11) apply to the integer in a char code.
+    while CharInSet(GetCurChar, ['0'..'9', 'A'..'F', 'a'..'f', '_']) do
     begin
-      LDigits := LDigits + GetCurChar;
+      if GetCurChar <> '_' then
+        LDigits := LDigits + GetCurChar;
       Advance;
     end;
   end
@@ -814,17 +821,19 @@ begin
   begin
     LDigits := '%';
     Advance;
-    while CharInSet(GetCurChar, ['0', '1']) do
+    while CharInSet(GetCurChar, ['0', '1', '_']) do
     begin
-      LDigits := LDigits + GetCurChar;
+      if GetCurChar <> '_' then
+        LDigits := LDigits + GetCurChar;
       Advance;
     end;
   end
   else
   begin
-    while CharInSet(GetCurChar, ['0'..'9']) do
+    while CharInSet(GetCurChar, ['0'..'9', '_']) do
     begin
-      LDigits := LDigits + GetCurChar;
+      if GetCurChar <> '_' then
+        LDigits := LDigits + GetCurChar;
       Advance;
     end;
   end;
