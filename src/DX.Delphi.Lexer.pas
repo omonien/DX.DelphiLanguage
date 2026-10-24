@@ -11,13 +11,15 @@
 ///
 ///   Supported surface:
 ///     - case-insensitive keywords, &-escaped identifiers, Unicode identifiers
-///     - single-quoted strings with '' escaping, #code char-code sequences
+///     - single-quoted strings with '' escaping, # char codes
+///       (decimal / $hex / %binary, '_' separators)
 ///     - Delphi 12+ multiline strings '''...''' (empirically verified rules:
 ///       an even run of quotes inside yields run/2 literal quotes; a run of
 ///       exactly three closes the string; odd runs > 3 are an error)
 ///     - integers (dec / $hex / %binary) with _ separators, floats with
-///       mantissa/exponent
-///     - nested block comments { ... } and (* ... *), // line comments,
+///       mantissa/exponent ('_' is ignored there too); inside asm, H/B/O
+///       numeric suffixes
+///     - block comments { ... } and (* ... *) do not nest, // line comments,
 ///       {$...} directives (kept as trivia; conditional compilation is NOT
 ///       evaluated)
 ///
@@ -67,6 +69,9 @@ type
     FTokens: TObjectList<TDLToken>;
     FLeadingTrivia: TList<TDLTrivia>;
     FSteps: Integer;
+    // True from the keyword asm until the next keyword end (ParseAsmStmt
+    // stops at that same end). H/B/O numeric suffixes are integers only then.
+    FInAsm: Boolean;
     function GetCurChar: Char;
     function GetCharAt(AOffset: Integer): Char;
     function GetCurrentPos: TDLSourcePos;
@@ -80,6 +85,7 @@ type
     procedure ScanDirective;
     procedure ScanIdentifier;
     procedure ScanNumber;
+    function TryAsmSuffixedNumber(AStart: TDLSourcePos): Boolean;
     procedure ScanString(ADelimiter: Char);
     procedure ScanMultilineString;
     procedure ScanCharCode;
@@ -148,6 +154,23 @@ begin
   end;
 end;
 
+function OctToInt64(const ADigits: string): Int64;
+var
+  i: Integer;
+  LDigit: Integer;
+begin
+  Result := 0;
+  for i := 1 to Length(ADigits) do
+  begin
+    LDigit := Ord(ADigits[i]) - Ord('0');
+    if (LDigit < 0) or (LDigit > 7) then
+      raise EConvertError.Create('invalid octal digit "' + ADigits[i] + '"');
+    if Result > (High(Int64) div 8) then
+      raise EConvertError.Create('octal literal out of range');
+    Result := Result * 8 + LDigit;
+  end;
+end;
+
 { TDLToken }
 
 constructor TDLToken.Create(AKind: TDLTokenKind; const AText: string;
@@ -204,6 +227,7 @@ begin
   FTokens := TObjectList<TDLToken>.Create(True);
   FLeadingTrivia := TList<TDLTrivia>.Create;
   FSteps := 0;
+  FInAsm := False;
 end;
 
 destructor TDLDelphiLexer.Destroy;
@@ -316,46 +340,38 @@ end;
 procedure TDLDelphiLexer.ScanBlockComment(AStartPos: TDLSourcePos;
   AKind: TDLTriviaKind);
 var
-  LDepth: Integer;
+  LClosed: Boolean;
   LIsParenStyle: Boolean;
 begin
+  // Delphi does not nest comments: a { } comment ends at the first '}', a
+  // (* *) comment at the first '*)', whatever they contain (dcc32 and dcc64
+  // 37.0: "{ a { b } X" compiles X). A '{' or '(*' inside is plain text, so
+  // System.ZLib's (* ... *) blocks holding {$IFDEF ...} close where dcc32
+  // closes them.
   LIsParenStyle := GetCurChar = '(';
   Advance; // '{' or '('
   if LIsParenStyle then
     Advance; // '*'
-  LDepth := 1;
-  while (GetCurChar <> #0) and (LDepth > 0) do
+  LClosed := False;
+  while GetCurChar <> #0 do
   begin
     if LIsParenStyle and (GetCurChar = '*') and (GetCharAt(FOffset + 1) = ')') then
     begin
       Advance;
       Advance;
-      Dec(LDepth);
-    end
-    else if LIsParenStyle and (GetCurChar = '(') and
-            (GetCharAt(FOffset + 1) = '*') then
-    begin
-      // nested (* ... *) comment
-      Advance;
-      Advance;
-      Inc(LDepth);
-    end
-    else if (not LIsParenStyle) and (GetCurChar = '{') then
-    begin
-      // '{' inside a { } comment: nested comment. '{' is also the end marker
-      // only via '}', so a plain '{' simply deepens.
-      Advance;
-      Inc(LDepth);
+      LClosed := True;
+      Break;
     end
     else if (not LIsParenStyle) and (GetCurChar = '}') then
     begin
       Advance;
-      Dec(LDepth);
+      LClosed := True;
+      Break;
     end
     else
       Advance;
   end;
-  if LDepth > 0 then
+  if not LClosed then
     FDiagnostics.Error('DLX-02', 'Unterminated block comment',
       TDLSourceSpan.Create(AStartPos, GetCurrentPos));
   AddTrivia(AKind, AStartPos);
@@ -427,6 +443,106 @@ begin
   LToken.Value := LName;
   if LKeyword <> kwNone then
     LToken.Kind := tkKeyword;
+  // '&asm' is an identifier (kwNone) and does not open a block. A second
+  // 'asm' before 'end' stays inside the block; the next 'end' closes it.
+  if LKeyword = kwAsm then
+    FInAsm := True
+  else if (LKeyword = kwEnd) and FInAsm then
+    FInAsm := False;
+end;
+
+function TDLDelphiLexer.TryAsmSuffixedNumber(AStart: TDLSourcePos): Boolean;
+var
+  LEnd: Integer;
+  LDigits: string;
+  LToken: TDLToken;
+
+  function EndsNumber(AAt: Integer): Boolean;
+  var
+    LNext: Char;
+  begin
+    // The suffix letter ends the literal when the next character cannot
+    // continue an identifier, so 1010B is binary and 1010BYTE is not.
+    LNext := GetCharAt(AAt);
+    Result := not (CharInSet(LNext, ['_', '0'..'9']) or LNext.IsLetter);
+  end;
+
+  function DigitsUntil(ASuffixAt: Integer): string;
+  begin
+    Result := '';
+    while FOffset < ASuffixAt do
+    begin
+      Result := Result + GetCurChar;
+      Advance;
+    end;
+    Advance; // suffix letter
+  end;
+
+begin
+  // Assembler numeric suffixes (Assembly Expressions): H hex, B binary,
+  // O octal. Scanning starts on a digit, so a hex form such as 0EBH already
+  // has the leading zero the compiler requires. A suffix is recognised only
+  // when every digit is legal for that base, so 2B stays a decimal integer
+  // plus an identifier. Hex is tried first because B is also a hex digit
+  // (10BH is $10B).
+  Result := False;
+
+  LEnd := FOffset;
+  while CharInSet(GetCharAt(LEnd), ['0'..'9', 'A'..'F', 'a'..'f']) do
+    Inc(LEnd);
+  if (LEnd > FOffset) and CharInSet(GetCharAt(LEnd), ['H', 'h']) and
+     EndsNumber(LEnd + 1) then
+  begin
+    LDigits := DigitsUntil(LEnd);
+    AddToken(tkInteger, AStart);
+    LToken := FTokens.Last;
+    try
+      LToken.IntegerValue := StrToInt64('$' + LDigits);
+    except
+      on E: EConvertError do
+        FDiagnostics.Error('DLX-04', 'Invalid hexadecimal literal "' + LDigits + 'H"',
+          LToken.Span);
+    end;
+    Exit(True);
+  end;
+
+  LEnd := FOffset;
+  while CharInSet(GetCharAt(LEnd), ['0', '1']) do
+    Inc(LEnd);
+  if (LEnd > FOffset) and CharInSet(GetCharAt(LEnd), ['B', 'b']) and
+     EndsNumber(LEnd + 1) then
+  begin
+    LDigits := DigitsUntil(LEnd);
+    AddToken(tkInteger, AStart);
+    LToken := FTokens.Last;
+    try
+      LToken.IntegerValue := BinToInt64(LDigits);
+    except
+      on E: EConvertError do
+        FDiagnostics.Error('DLX-05', 'Invalid binary literal "' + LDigits + 'B"',
+          LToken.Span);
+    end;
+    Exit(True);
+  end;
+
+  LEnd := FOffset;
+  while CharInSet(GetCharAt(LEnd), ['0'..'7']) do
+    Inc(LEnd);
+  if (LEnd > FOffset) and CharInSet(GetCharAt(LEnd), ['O', 'o']) and
+     EndsNumber(LEnd + 1) then
+  begin
+    LDigits := DigitsUntil(LEnd);
+    AddToken(tkInteger, AStart);
+    LToken := FTokens.Last;
+    try
+      LToken.IntegerValue := OctToInt64(LDigits);
+    except
+      on E: EConvertError do
+        FDiagnostics.Error('DLX-14', 'Invalid octal literal "' + LDigits + 'O"',
+          LToken.Span);
+    end;
+    Exit(True);
+  end;
 end;
 
 procedure TDLDelphiLexer.ScanNumber;
@@ -482,6 +598,8 @@ begin
     end;
     Exit;
   end;
+  if FInAsm and TryAsmSuffixedNumber(LStart) then
+    Exit;
   // Decimal (integer or float).
   LDigits := '';
   while CharInSet(GetCurChar, ['0'..'9', '_']) do
@@ -512,9 +630,12 @@ begin
       LDigits := LDigits + GetCurChar;
       Advance;
     end;
-    while CharInSet(GetCurChar, ['0'..'9']) do
+    // Delphi 11 ignores '_' in numeric literals. The mantissa already does;
+    // the exponent does too (1.5e1_0).
+    while CharInSet(GetCurChar, ['0'..'9', '_']) do
     begin
-      LDigits := LDigits + GetCurChar;
+      if GetCurChar <> '_' then
+        LDigits := LDigits + GetCurChar;
       Advance;
     end;
   end;
@@ -688,9 +809,11 @@ begin
   begin
     LDigits := '$';
     Advance;
-    while CharInSet(GetCurChar, ['0'..'9', 'A'..'F', 'a'..'f']) do
+    // Digit separators (Delphi 11) apply to the integer in a char code.
+    while CharInSet(GetCurChar, ['0'..'9', 'A'..'F', 'a'..'f', '_']) do
     begin
-      LDigits := LDigits + GetCurChar;
+      if GetCurChar <> '_' then
+        LDigits := LDigits + GetCurChar;
       Advance;
     end;
   end
@@ -698,17 +821,19 @@ begin
   begin
     LDigits := '%';
     Advance;
-    while CharInSet(GetCurChar, ['0', '1']) do
+    while CharInSet(GetCurChar, ['0', '1', '_']) do
     begin
-      LDigits := LDigits + GetCurChar;
+      if GetCurChar <> '_' then
+        LDigits := LDigits + GetCurChar;
       Advance;
     end;
   end
   else
   begin
-    while CharInSet(GetCurChar, ['0'..'9']) do
+    while CharInSet(GetCurChar, ['0'..'9', '_']) do
     begin
-      LDigits := LDigits + GetCurChar;
+      if GetCurChar <> '_' then
+        LDigits := LDigits + GetCurChar;
       Advance;
     end;
   end;

@@ -1,6 +1,6 @@
 ﻿/// <summary>
 ///   Tests.DX.Delphi.Lexer.Advanced — additional DUnitX lexer coverage:
-///   operators, directives, nested comment styles, line counting, error
+///   operators, directives, block comments (they do not nest), line counting, error
 ///   codes and multiline-string edge cases.
 /// </summary>
 /// <author>Olaf Monien</author>
@@ -143,7 +143,7 @@ begin
   try
     LTokens := TokenizeToArray('0..9', LDiagnostics);
     Assert.AreEqual(0, LDiagnostics.Count);
-    Assert.AreEqual(4, Length(LTokens)); // 0, '..', 9, EOF
+    Assert.AreEqual<NativeInt>(4, Length(LTokens)); // 0, '..', 9, EOF
     Assert.AreEqual('..', LTokens[1].Text);
   finally
     LDiagnostics.Free;
@@ -178,8 +178,8 @@ begin
   try
     LTokens := TokenizeToArray('(* a comment *) x', LDiagnostics);
     Assert.AreEqual(0, LDiagnostics.Count);
-    Assert.AreEqual(2, Length(LTokens));
-    Assert.AreEqual(2, LTokens[0].LeadingTrivia.Count);
+    Assert.AreEqual<NativeInt>(2, Length(LTokens));
+    Assert.AreEqual<NativeInt>(2, LTokens[0].LeadingTrivia.Count);
     Assert.AreEqual(trBlockComment, LTokens[0].LeadingTrivia[0].Kind);
   finally
     LDiagnostics.Free;
@@ -191,11 +191,17 @@ var
   LDiagnostics: TDLDiagnostics;
   LTokens: TArray<TDLToken>;
 begin
+  // dcc ends a (* *) comment at the first '*)'. Text after that closer
+  // is real source, with no leftover '* )' delimiter.
   LDiagnostics := TDLDiagnostics.Create;
   try
-    LTokens := TokenizeToArray('(* outer (* inner *) done *) x', LDiagnostics);
+    LTokens := TokenizeToArray('(* outer (* inner *) done x', LDiagnostics);
     Assert.AreEqual(0, LDiagnostics.Count);
-    Assert.AreEqual(2, Length(LTokens));
+    Assert.AreEqual<NativeInt>(3, Length(LTokens));
+    Assert.AreEqual('done', LTokens[0].Text);
+    Assert.AreEqual(trBlockComment, LTokens[0].LeadingTrivia[0].Kind);
+    Assert.AreEqual('(* outer (* inner *)', LTokens[0].LeadingTrivia[0].Text);
+    Assert.AreEqual('x', LTokens[1].Text);
   finally
     LDiagnostics.Free;
   end;

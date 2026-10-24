@@ -93,7 +93,7 @@ begin
       LClass := TDLClassType(
         TDLTypeDecl(TDLTypeSection(LUnit.Items[0]).Items[0]).TypeExpr);
       Assert.IsTrue(LClass.IsInterface);
-      Assert.AreEqual(1, LClass.Members.Count);
+      Assert.AreEqual<NativeInt>(1, LClass.Members.Count);
     finally
       LUnit.Free;
     end;
@@ -149,7 +149,7 @@ begin
       LClass := TDLClassType(
         TDLTypeDecl(TDLTypeSection(LUnit.Items[0]).Items[0]).TypeExpr);
       Assert.IsTrue(LClass.IsObject);
-      Assert.AreEqual(2, LClass.Members.Count);
+      Assert.AreEqual<NativeInt>(2, LClass.Members.Count);
     finally
       LUnit.Free;
     end;
@@ -305,7 +305,7 @@ begin
       Assert.AreEqual(0, LDiagnostics.Count);
       LClass := TDLClassType(
         TDLTypeDecl(TDLTypeSection(LUnit.Items[0]).Items[0]).TypeExpr);
-      Assert.AreEqual(1, LClass.Members.Count);
+      Assert.AreEqual<NativeInt>(1, LClass.Members.Count);
     finally
       LUnit.Free;
     end;
@@ -330,9 +330,9 @@ begin
       Assert.AreEqual(0, LDiagnostics.Count);
       LNamed := TDLNamedType(
         TDLTypeDecl(TDLTypeSection(LUnit.Items[0]).Items[0]).TypeExpr);
-      Assert.AreEqual(1, LNamed.TypeArgs.Count);
+      Assert.AreEqual<NativeInt>(1, LNamed.TypeArgs.Count);
       Assert.IsTrue(LNamed.TypeArgs[0].TypeExpr is TDLNamedType);
-      Assert.AreEqual(2, TDLNamedType(
+      Assert.AreEqual<NativeInt>(2, TDLNamedType(
         LNamed.TypeArgs[0].TypeExpr).TypeArgs.Count);
     finally
       LUnit.Free;
@@ -358,7 +358,7 @@ begin
       Assert.AreEqual(0, LDiagnostics.Count);
       Assert.IsTrue(LUnit.Items[0] is TDLMethodImpl);
       LMethod := TDLMethodImpl(LUnit.Items[0]);
-      Assert.AreEqual(1, LMethod.Params.Count);
+      Assert.AreEqual<NativeInt>(1, LMethod.Params.Count);
     finally
       LUnit.Free;
     end;
@@ -385,7 +385,7 @@ begin
       Assert.AreEqual(0, LDiagnostics.Count);
       LEnum := TDLEnumType(
         TDLTypeDecl(TDLTypeSection(LUnit.Items[0]).Items[0]).TypeExpr);
-      Assert.AreEqual(3, LEnum.Members.Count);
+      Assert.AreEqual<NativeInt>(3, LEnum.Members.Count);
       Assert.IsNotNull(LEnum.Members[0].Value);
     finally
       LUnit.Free;

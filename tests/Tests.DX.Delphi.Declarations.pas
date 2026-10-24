@@ -161,7 +161,7 @@ begin
     try
       Assert.AreEqual(0, LDiagnostics.Count);
       LConst := TDLConstDecl(TDLConstSection(LUnit.Items[0]).Items[0]);
-      Assert.AreEqual(3, LConst.Names.Count);
+      Assert.AreEqual<NativeInt>(3, LConst.Names.Count);
     finally
       LUnit.Free;
     end;
@@ -263,7 +263,7 @@ begin
     try
       Assert.AreEqual(0, LDiagnostics.Count);
       Assert.IsTrue(LUnit.Items[0] is TDLVarSection);
-      Assert.AreEqual(1, TDLVarSection(LUnit.Items[0]).Attributes.Count);
+      Assert.AreEqual<NativeInt>(1, TDLVarSection(LUnit.Items[0]).Attributes.Count);
     finally
       LUnit.Free;
     end;
@@ -405,8 +405,8 @@ begin
       LProc := TDLProceduralType(
         TDLTypeDecl(TDLTypeSection(LUnit.Items[0]).Items[0]).TypeExpr);
       Assert.AreEqual(prFunction, LProc.Kind);
-      Assert.AreEqual(1, LProc.Params.Count);
-      Assert.AreEqual(1, LProc.Directives.Count);
+      Assert.AreEqual<NativeInt>(1, LProc.Params.Count);
+      Assert.AreEqual<NativeInt>(1, LProc.Directives.Count);
     finally
       LUnit.Free;
     end;
@@ -438,16 +438,16 @@ begin
       Assert.AreEqual(0, LDiagnostics.Count);
       LSection := TDLTypeSection(LUnit.Items[0]);
       // A, [conditional group], C
-      Assert.AreEqual(3, LSection.Items.Count);
+      Assert.AreEqual<NativeInt>(3, LSection.Items.Count);
       Assert.IsTrue(LSection.Items[0] is TDLTypeDecl);
       Assert.IsTrue(LSection.Items[1] is TDLConditionalGroup);
       Assert.IsTrue(LSection.Items[2] is TDLTypeDecl);
       LGroup := TDLConditionalGroup(LSection.Items[1]);
-      Assert.AreEqual(2, LGroup.Branches.Count);
+      Assert.AreEqual<NativeInt>(2, LGroup.Branches.Count);
       Assert.AreEqual('Defined(POSIX)', LGroup.Branches[0].Condition.ToString);
-      Assert.AreEqual(1, LGroup.Branches[0].Items.Count);
+      Assert.AreEqual<NativeInt>(1, LGroup.Branches[0].Items.Count);
       Assert.AreEqual(ckAlways, LGroup.Branches[1].Condition.Kind);
-      Assert.AreEqual(1, LGroup.Branches[1].Items.Count);
+      Assert.AreEqual<NativeInt>(1, LGroup.Branches[1].Items.Count);
     finally
       LUnit.Free;
     end;
@@ -490,7 +490,7 @@ begin
           end;
         // Empty configuration: the {$ELSE} branch (Double) is active.
         Assert.IsNotNull(LActive);
-        Assert.AreEqual(1, LActive.Items.Count);
+        Assert.AreEqual<NativeInt>(1, LActive.Items.Count);
       finally
         LDefines.Free;
       end;
@@ -525,14 +525,14 @@ begin
       Assert.AreEqual(0, LDiagnostics.Count);
       LSection := TDLConstSection(LUnit.Items[0]);
       // A, [conditional group], C
-      Assert.AreEqual(3, LSection.Items.Count);
+      Assert.AreEqual<NativeInt>(3, LSection.Items.Count);
       Assert.IsTrue(LSection.Items[0] is TDLConstDecl);
       Assert.IsTrue(LSection.Items[1] is TDLConditionalGroup);
       Assert.IsTrue(LSection.Items[2] is TDLConstDecl);
       LGroup := TDLConditionalGroup(LSection.Items[1]);
-      Assert.AreEqual(2, LGroup.Branches.Count);
+      Assert.AreEqual<NativeInt>(2, LGroup.Branches.Count);
       Assert.AreEqual('Defined(POSIX)', LGroup.Branches[0].Condition.ToString);
-      Assert.AreEqual(1, LGroup.Branches[0].Items.Count);
+      Assert.AreEqual<NativeInt>(1, LGroup.Branches[0].Items.Count);
       Assert.IsTrue(LGroup.Branches[0].Items[0] is TDLConstDecl);
       Assert.AreEqual('B', TDLConstDecl(
         LGroup.Branches[0].Items[0]).Names[0].Name);
@@ -567,14 +567,14 @@ begin
     try
       Assert.AreEqual(0, LDiagnostics.Count);
       LSection := TDLVarSection(LUnit.Items[0]);
-      Assert.AreEqual(3, LSection.Items.Count);
+      Assert.AreEqual<NativeInt>(3, LSection.Items.Count);
       Assert.IsTrue(LSection.Items[0] is TDLVarDecl);
       Assert.IsTrue(LSection.Items[1] is TDLConditionalGroup);
       Assert.IsTrue(LSection.Items[2] is TDLVarDecl);
       LGroup := TDLConditionalGroup(LSection.Items[1]);
-      Assert.AreEqual(2, LGroup.Branches.Count);
+      Assert.AreEqual<NativeInt>(2, LGroup.Branches.Count);
       Assert.AreEqual('Defined(POSIX)', LGroup.Branches[0].Condition.ToString);
-      Assert.AreEqual(1, LGroup.Branches[0].Items.Count);
+      Assert.AreEqual<NativeInt>(1, LGroup.Branches[0].Items.Count);
       Assert.IsTrue(LGroup.Branches[0].Items[0] is TDLVarDecl);
       Assert.AreEqual('Y', TDLVarDecl(
         LGroup.Branches[0].Items[0]).Names[0].Name);
@@ -612,9 +612,9 @@ begin
     try
       Assert.AreEqual(0, LDiagnostics.Count);
       // One type section holding all interface declarations.
-      Assert.AreEqual(1, LUnit.Items.Count);
+      Assert.AreEqual<NativeInt>(1, LUnit.Items.Count);
       Assert.IsTrue(LUnit.Items[0] is TDLTypeSection);
-      Assert.AreEqual(3, TDLTypeSection(LUnit.Items[0]).Items.Count);
+      Assert.AreEqual<NativeInt>(3, TDLTypeSection(LUnit.Items[0]).Items.Count);
     finally
       LUnit.Free;
     end;

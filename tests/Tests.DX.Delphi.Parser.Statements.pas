@@ -360,9 +360,9 @@ begin
       Assert.AreEqual(0, LDiagnostics.Count);
       Assert.IsNotNull(LUnit.InitSection);
       Assert.IsNotNull(LUnit.FinalizationSection);
-      Assert.AreEqual(2, TDLCompoundStmt(
+      Assert.AreEqual<NativeInt>(2, TDLCompoundStmt(
         LUnit.InitSection.Body).Statements.Count);
-      Assert.AreEqual(1, TDLCompoundStmt(
+      Assert.AreEqual<NativeInt>(1, TDLCompoundStmt(
         LUnit.FinalizationSection.Body).Statements.Count);
     finally
       LUnit.Free;
@@ -394,14 +394,14 @@ begin
     try
       Assert.AreEqual(0, LDiagnostics.Count);
       LBody := TDLCompoundStmt(LUnit.InitSection.Body);
-      Assert.AreEqual(2, LBody.Statements.Count);
+      Assert.AreEqual<NativeInt>(2, LBody.Statements.Count);
       LCond := TDLConditionalStmt(LBody.Statements[0]);
-      Assert.AreEqual(2, LCond.Branches.Count);
+      Assert.AreEqual<NativeInt>(2, LCond.Branches.Count);
       Assert.IsNotNull(LCond.Branches[0].Condition);
       Assert.AreEqual('Defined(A)', LCond.Branches[0].Condition.ToString);
-      Assert.AreEqual(1, LCond.Branches[0].Statements.Count);
+      Assert.AreEqual<NativeInt>(1, LCond.Branches[0].Statements.Count);
       Assert.AreEqual(ckAlways, LCond.Branches[1].Condition.Kind);
-      Assert.AreEqual(1, LCond.Branches[1].Statements.Count);
+      Assert.AreEqual<NativeInt>(1, LCond.Branches[1].Statements.Count);
       // The statement after {$ENDIF} is a sibling of the conditional group.
       Assert.IsTrue(LBody.Statements[1] is TDLExprStmt);
     finally
@@ -434,7 +434,7 @@ begin
       Assert.AreEqual(0, LDiagnostics.Count);
       LBody := TDLCompoundStmt(LUnit.InitSection.Body);
       LCond := TDLConditionalStmt(LBody.Statements[0]);
-      Assert.AreEqual(3, LCond.Branches.Count);
+      Assert.AreEqual<NativeInt>(3, LCond.Branches.Count);
       Assert.AreEqual('Defined(A)', LCond.Branches[0].Condition.ToString);
       Assert.AreEqual('Defined(B)', LCond.Branches[1].Condition.ToString);
       Assert.AreEqual(ckAlways, LCond.Branches[2].Condition.Kind);
@@ -554,7 +554,7 @@ begin
         LProjected := TDLTreeProjector.ProjectStatements(LBody.Statements,
           LDefines);
         try
-          Assert.AreEqual(2, LProjected.Count);
+          Assert.AreEqual<NativeInt>(2, LProjected.Count);
           Assert.IsTrue(LProjected[0] is TDLExprStmt);
           Assert.IsTrue(LProjected[1] is TDLExprStmt);
         finally
@@ -568,7 +568,7 @@ begin
         LProjected := TDLTreeProjector.ProjectStatements(LBody.Statements,
           LDefines);
         try
-          Assert.AreEqual(2, LProjected.Count);
+          Assert.AreEqual<NativeInt>(2, LProjected.Count);
         finally
           TDLTreeProjector.DisposeProjected(LProjected);
           LProjected.Free;
@@ -579,7 +579,7 @@ begin
         LProjected := TDLTreeProjector.ProjectStatements(LBody.Statements,
           LDefines);
         try
-          Assert.AreEqual(2, LProjected.Count);
+          Assert.AreEqual<NativeInt>(2, LProjected.Count);
         finally
           TDLTreeProjector.DisposeProjected(LProjected);
           LProjected.Free;

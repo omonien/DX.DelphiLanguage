@@ -78,9 +78,9 @@ begin
       Assert.AreEqual(pkPackage, LUnit.ProgramKind);
       Assert.AreEqual('MyPkg', LUnit.Name.Name);
       Assert.IsNotNull(LUnit.RequiresClause);
-      Assert.AreEqual(2, LUnit.RequiresClause.References.Count);
+      Assert.AreEqual<NativeInt>(2, LUnit.RequiresClause.References.Count);
       Assert.IsNotNull(LUnit.ContainsClause);
-      Assert.AreEqual(2, LUnit.ContainsClause.References.Count);
+      Assert.AreEqual<NativeInt>(2, LUnit.ContainsClause.References.Count);
       Assert.AreEqual('UnitB', LUnit.ContainsClause.References[1].Name.Name);
     finally
       LUnit.Free;
@@ -105,7 +105,7 @@ begin
     try
       Assert.AreEqual(0, LDiagnostics.Count);
       Assert.AreEqual(pkProgram, LUnit.ProgramKind);
-      Assert.AreEqual(2, LUnit.ProgramParams.Count);
+      Assert.AreEqual<NativeInt>(2, LUnit.ProgramParams.Count);
       Assert.AreEqual('input', LUnit.ProgramParams[0].Name);
       Assert.AreEqual('output', LUnit.ProgramParams[1].Name);
     finally
@@ -150,10 +150,10 @@ begin
       LDiagnostics);
     try
       Assert.AreEqual(0, LDiagnostics.Count);
-      Assert.AreEqual(1, LUnit.Items.Count);
+      Assert.AreEqual<NativeInt>(1, LUnit.Items.Count);
       Assert.IsTrue(LUnit.Items[0] is TDLVarSection);
       Assert.IsNotNull(LUnit.InitSection);
-      Assert.AreEqual(1, TDLCompoundStmt(
+      Assert.AreEqual<NativeInt>(1, TDLCompoundStmt(
         LUnit.InitSection.Body).Statements.Count);
     finally
       LUnit.Free;
@@ -182,7 +182,7 @@ begin
       Assert.AreEqual(0, LDiagnostics.Count);
       Assert.AreEqual(pkLibrary, LUnit.ProgramKind);
       Assert.IsTrue(LUnit.Items[0] is TDLExportsClause);
-      Assert.AreEqual(2, TDLExportsClause(LUnit.Items[0]).Items.Count);
+      Assert.AreEqual<NativeInt>(2, TDLExportsClause(LUnit.Items[0]).Items.Count);
       Assert.IsNotNull(LUnit.InitSection);
     finally
       LUnit.Free;
@@ -207,7 +207,7 @@ begin
       LDiagnostics);
     try
       Assert.AreEqual(0, LDiagnostics.Count);
-      Assert.AreEqual(2, LUnit.UsesClauses.Count);
+      Assert.AreEqual<NativeInt>(2, LUnit.UsesClauses.Count);
       Assert.AreEqual('System.SysUtils', LUnit.UsesClauses[0].References[0].Name.Name);
       Assert.AreEqual('System.Math', LUnit.UsesClauses[1].References[0].Name.Name);
     finally
@@ -234,7 +234,7 @@ begin
     try
       Assert.AreEqual(0, LDiagnostics.Count);
       Assert.IsTrue(LUnit.Items[0] is TDLResStringSection);
-      Assert.AreEqual(1, TDLResStringSection(LUnit.Items[0]).Items.Count);
+      Assert.AreEqual<NativeInt>(1, TDLResStringSection(LUnit.Items[0]).Items.Count);
       Assert.IsTrue(LUnit.Items[1] is TDLVarSection);
       Assert.IsTrue(TDLVarSection(LUnit.Items[1]).IsThreadVar);
     finally

@@ -42,6 +42,8 @@ type
     procedure UnderscoreSeparators;
     [Test]
     procedure Floats;
+    [Test]
+    procedure DigitSeparatorsInFloats;
   end;
 
   [TestFixture]
@@ -55,6 +57,8 @@ type
     procedure MultilineString;
     [Test]
     procedure MultilineStringQuoteRun;
+    [Test]
+    procedure DigitSeparatorsInCharCodes;
   end;
 
   [TestFixture]
@@ -128,7 +132,7 @@ begin
   LDiagnostics := TDLDiagnostics.Create;
   try
     LTokens := TokenizeToArray('', LDiagnostics);
-    Assert.AreEqual(1, Length(LTokens));
+    Assert.AreEqual<NativeInt>(1, Length(LTokens));
     Assert.AreEqual(tkEOF, LTokens[0].Kind);
     Assert.AreEqual(0, LDiagnostics.Count);
   finally
@@ -262,6 +266,35 @@ begin
   end;
 end;
 
+procedure TTestLexerNumbers.DigitSeparatorsInFloats;
+var
+  LDiagnostics: TDLDiagnostics;
+  LTokens: TArray<TDLToken>;
+begin
+  // Delphi 11 ignores '_' inside a numeric literal, including the fraction
+  // and the exponent. 1_0..2_0 must stay a range, not a float.
+  LDiagnostics := TDLDiagnostics.Create;
+  try
+    LTokens := TokenizeToArray('1_000.25 6.022_140e23 1.5e1_0 1_0..2_0',
+      LDiagnostics);
+    Assert.AreEqual(0, LDiagnostics.Count);
+    Assert.AreEqual(tkFloat, LTokens[0].Kind);
+    Assert.AreEqual<Double>(1000.25, LTokens[0].FloatValue);
+    Assert.AreEqual(tkFloat, LTokens[1].Kind);
+    Assert.AreEqual<Double>(
+      StrToFloat('6.022140E23', TFormatSettings.Invariant),
+      LTokens[1].FloatValue);
+    Assert.AreEqual(tkFloat, LTokens[2].Kind);
+    Assert.AreEqual<Double>(1.5e10, LTokens[2].FloatValue);
+    Assert.AreEqual(tkInteger, LTokens[3].Kind);
+    Assert.AreEqual<Int64>(10, LTokens[3].IntegerValue);
+    Assert.AreEqual('..', LTokens[4].Text);
+    Assert.AreEqual<Int64>(20, LTokens[5].IntegerValue);
+  finally
+    LDiagnostics.Free;
+  end;
+end;
+
 { TTestLexerStrings }
 
 procedure TTestLexerStrings.SingleQuotedWithEscapes;
@@ -287,7 +320,7 @@ begin
   LDiagnostics := TDLDiagnostics.Create;
   try
     LTokens := TokenizeToArray('#65#$41#%1000001', LDiagnostics);
-    Assert.AreEqual(3, Length(LTokens) - 1); // 3 char codes + EOF
+    Assert.AreEqual<NativeInt>(3, Length(LTokens) - 1); // 3 char codes + EOF
     Assert.AreEqual(tkCharCode, LTokens[0].Kind);
     Assert.AreEqual('A', LTokens[0].Value);
     Assert.AreEqual('A', LTokens[1].Value);
@@ -336,6 +369,25 @@ begin
   end;
 end;
 
+procedure TTestLexerStrings.DigitSeparatorsInCharCodes;
+var
+  LDiagnostics: TDLDiagnostics;
+  LTokens: TArray<TDLToken>;
+begin
+  LDiagnostics := TDLDiagnostics.Create;
+  try
+    LTokens := TokenizeToArray('#6_5#$4_1#%100_0001', LDiagnostics);
+    Assert.AreEqual(0, LDiagnostics.Count);
+    Assert.AreEqual<NativeInt>(4, Length(LTokens));
+    Assert.AreEqual(tkCharCode, LTokens[0].Kind);
+    Assert.AreEqual('A', LTokens[0].Value);
+    Assert.AreEqual('A', LTokens[1].Value);
+    Assert.AreEqual('A', LTokens[2].Value);
+  finally
+    LDiagnostics.Free;
+  end;
+end;
+
 { TTestLexerTrivia }
 
 procedure TTestLexerTrivia.LineCommentAttachedToNextToken;
@@ -347,9 +399,9 @@ begin
   try
     LTokens := TokenizeToArray('a// comment'#13#10'b', LDiagnostics);
     // tokens: a, b, EOF (comments/whitespace are trivia, not tokens)
-    Assert.AreEqual(3, Length(LTokens));
+    Assert.AreEqual<NativeInt>(3, Length(LTokens));
     // b carries the line comment AND the line break
-    Assert.AreEqual(2, LTokens[1].LeadingTrivia.Count);
+    Assert.AreEqual<NativeInt>(2, LTokens[1].LeadingTrivia.Count);
     Assert.AreEqual(trLineComment, LTokens[1].LeadingTrivia[0].Kind);
   finally
     LDiagnostics.Free;
@@ -361,14 +413,18 @@ var
   LDiagnostics: TDLDiagnostics;
   LTokens: TArray<TDLToken>;
 begin
+  // dcc ends a { } comment at the first '}'. Text after that closer is
+  // real source. There is no second '}' left over (that token is DLX-01).
   LDiagnostics := TDLDiagnostics.Create;
   try
-    LTokens := TokenizeToArray('{ outer { inner } still } x', LDiagnostics);
+    LTokens := TokenizeToArray('{ outer { inner } still x', LDiagnostics);
     Assert.AreEqual(0, LDiagnostics.Count);
-    Assert.AreEqual(2, Length(LTokens));
-    Assert.AreEqual('x', LTokens[0].Text);
-    Assert.AreEqual(2, LTokens[0].LeadingTrivia.Count);
+    Assert.AreEqual<NativeInt>(3, Length(LTokens));
+    Assert.AreEqual('still', LTokens[0].Text);
+    Assert.AreEqual<NativeInt>(2, LTokens[0].LeadingTrivia.Count);
     Assert.AreEqual(trBlockComment, LTokens[0].LeadingTrivia[0].Kind);
+    Assert.AreEqual('{ outer { inner }', LTokens[0].LeadingTrivia[0].Text);
+    Assert.AreEqual('x', LTokens[1].Text);
   finally
     LDiagnostics.Free;
   end;
@@ -383,7 +439,7 @@ begin
   try
     LTokens := TokenizeToArray('{$IFDEF DEBUG} x', LDiagnostics);
     Assert.AreEqual(0, LDiagnostics.Count);
-    Assert.AreEqual(2, Length(LTokens));
+    Assert.AreEqual<NativeInt>(2, Length(LTokens));
     Assert.AreEqual(trDirective, LTokens[0].LeadingTrivia[0].Kind);
   finally
     LDiagnostics.Free;
@@ -414,7 +470,7 @@ begin
   try
     LTokens := TokenizeToArray('a ? b', LDiagnostics);
     Assert.AreEqual('DLX-01', FirstErrorCode(LDiagnostics));
-    Assert.AreEqual(4, Length(LTokens)); // a, ?, b, EOF
+    Assert.AreEqual<NativeInt>(4, Length(LTokens)); // a, ?, b, EOF
     Assert.AreEqual(tkUnknown, LTokens[1].Kind);
   finally
     LDiagnostics.Free;
