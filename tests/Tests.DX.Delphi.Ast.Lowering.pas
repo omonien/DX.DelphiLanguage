@@ -132,7 +132,7 @@ begin
       Assert.AreEqual(0, LDiagnostics.Count);
       LDecl := TDLTypeDecl(LModule.Declarations[0]);
       Assert.IsTrue(LDecl.TypeDef is TDLStaticArrayTypeDef);
-      Assert.AreEqual(2, TDLStaticArrayTypeDef(
+      Assert.AreEqual<NativeInt>(2, TDLStaticArrayTypeDef(
         LDecl.TypeDef).Bounds.Count);
       Assert.AreEqual('Double', TDLStaticArrayTypeDef(
         LDecl.TypeDef).ElementType);
@@ -169,7 +169,7 @@ begin
         TDLTypeDecl(LModule.Declarations[0]).TypeDef);
       Assert.IsNotNull(LRecord.VariantPart);
       Assert.AreEqual('Kind', LRecord.VariantPart.Tag);
-      Assert.AreEqual(2, LRecord.VariantPart.Fields.Count);
+      Assert.AreEqual<NativeInt>(2, LRecord.VariantPart.Fields.Count);
     finally
       LModule.Free;
     end;
@@ -236,8 +236,8 @@ begin
       Assert.AreEqual('Compute', LMethod.Name);
       Assert.AreEqual(prFunction, LMethod.Kind);
       Assert.AreEqual('Integer', LMethod.ReturnType);
-      Assert.AreEqual(1, LMethod.Params.Count);
-      Assert.AreEqual(1, LMethod.Directives.Count);
+      Assert.AreEqual<NativeInt>(1, LMethod.Params.Count);
+      Assert.AreEqual<NativeInt>(1, LMethod.Directives.Count);
       Assert.AreEqual('virtual', LMethod.Directives[0]);
     finally
       LModule.Free;
@@ -311,7 +311,7 @@ begin
     try
       Assert.AreEqual(0, LDiagnostics.Count);
       LProc := TDLProcDecl(LModule.Declarations[0]);
-      Assert.AreEqual(4, LProc.Body.Count);
+      Assert.AreEqual<NativeInt>(4, LProc.Body.Count);
       Assert.IsTrue(LProc.Body[0] is TDLForStmt);
       Assert.AreEqual('to', TDLForStmt(LProc.Body[0]).Direction);
       Assert.IsTrue(LProc.Body[1] is TDLWhileStmt);
@@ -351,7 +351,7 @@ begin
       LProc := TDLProcDecl(LModule.Declarations[0]);
       LTry := TDLTryStmt(LProc.Body[0]);
       Assert.IsTrue(LTry.IsExcept);
-      Assert.AreEqual(1, LTry.Handlers.Count);
+      Assert.AreEqual<NativeInt>(1, LTry.Handlers.Count);
       Assert.AreEqual('E', LTry.Handlers[0].VarName);
       Assert.AreEqual('Exception', LTry.Handlers[0].TypeName);
       Assert.IsNotNull(LTry.ElseBranch);
@@ -419,7 +419,7 @@ begin
       LProc := TDLProcDecl(LModule.Declarations[0]);
       LExprStmt := TDLExprStmt(LProc.Body[0]);
       LCall := TDLCallExpr(LExprStmt.Expression);
-      Assert.AreEqual(2, LCall.Args.Count);
+      Assert.AreEqual<NativeInt>(2, LCall.Args.Count);
       Assert.IsTrue(LCall.Callee is TDLMemberExpr);
       Assert.AreEqual('Bar', TDLMemberExpr(LCall.Callee).Member);
     finally
@@ -452,7 +452,7 @@ begin
     try
       Assert.AreEqual(0, LDiagnostics.Count);
       LProc := TDLProcDecl(LModule.Declarations[0]);
-      Assert.AreEqual(2, LProc.LocalDeclarations.Count);
+      Assert.AreEqual<NativeInt>(2, LProc.LocalDeclarations.Count);
       LFoundVar := False;
       LFoundLabel := False;
       for LDecl in LProc.LocalDeclarations do
@@ -492,7 +492,7 @@ begin
       Assert.AreEqual(0, LDiagnostics.Count);
       LTypeDecl := TDLTypeDecl(LModule.Declarations[0]);
       Assert.IsTrue(LTypeDecl.TypeDef is TDLGenericTypeDef);
-      Assert.AreEqual(1, TDLGenericTypeDef(LTypeDecl.TypeDef).TypeParams.Count);
+      Assert.AreEqual<NativeInt>(1, TDLGenericTypeDef(LTypeDecl.TypeDef).TypeParams.Count);
       Assert.AreEqual('T', TDLGenericTypeDef(
         LTypeDecl.TypeDef).TypeParams[0]);
       Assert.IsTrue(TDLGenericTypeDef(LTypeDecl.TypeDef).BaseDef
@@ -526,7 +526,7 @@ begin
       Assert.AreEqual(boAdd, TDLBinaryExpr(LConst.Value).Operator);
       LConst := TDLConstDecl(LModule.Declarations[1]);
       Assert.IsTrue(LConst.Value is TDLSetExpr);
-      Assert.AreEqual(3, TDLSetExpr(LConst.Value).Elements.Count);
+      Assert.AreEqual<NativeInt>(3, TDLSetExpr(LConst.Value).Elements.Count);
     finally
       LModule.Free;
     end;
@@ -552,7 +552,7 @@ begin
     try
       Assert.AreEqual(0, LDiagnostics.Count);
       LProc := TDLProcDecl(LModule.Declarations[1]);
-      Assert.AreEqual(1, LProc.LocalDeclarations.Count);
+      Assert.AreEqual<NativeInt>(1, LProc.LocalDeclarations.Count);
       Assert.IsTrue(LProc.LocalDeclarations[0] is TDLVarDecl);
     finally
       LModule.Free;

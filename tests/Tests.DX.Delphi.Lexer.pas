@@ -401,7 +401,7 @@ begin
     // tokens: a, b, EOF (comments/whitespace are trivia, not tokens)
     Assert.AreEqual<NativeInt>(3, Length(LTokens));
     // b carries the line comment AND the line break
-    Assert.AreEqual(2, LTokens[1].LeadingTrivia.Count);
+    Assert.AreEqual<NativeInt>(2, LTokens[1].LeadingTrivia.Count);
     Assert.AreEqual(trLineComment, LTokens[1].LeadingTrivia[0].Kind);
   finally
     LDiagnostics.Free;
@@ -421,7 +421,7 @@ begin
     Assert.AreEqual(0, LDiagnostics.Count);
     Assert.AreEqual<NativeInt>(3, Length(LTokens));
     Assert.AreEqual('still', LTokens[0].Text);
-    Assert.AreEqual(2, LTokens[0].LeadingTrivia.Count);
+    Assert.AreEqual<NativeInt>(2, LTokens[0].LeadingTrivia.Count);
     Assert.AreEqual(trBlockComment, LTokens[0].LeadingTrivia[0].Kind);
     Assert.AreEqual('{ outer { inner }', LTokens[0].LeadingTrivia[0].Text);
     Assert.AreEqual('x', LTokens[1].Text);

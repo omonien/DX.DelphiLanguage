@@ -151,8 +151,8 @@ begin
           LProperty := TDLPropertyDecl(LMember);
       Assert.IsNotNull(LProperty);
       // Cells[ARow, ACol: Integer] is ONE parameter group with two names
-      Assert.AreEqual(1, LProperty.IndexParams.Count);
-      Assert.AreEqual(2, LProperty.IndexParams[0].Names.Count);
+      Assert.AreEqual<NativeInt>(1, LProperty.IndexParams.Count);
+      Assert.AreEqual<NativeInt>(2, LProperty.IndexParams[0].Names.Count);
     finally
       LUnit.Free;
     end;
@@ -185,7 +185,7 @@ begin
         if LMember is TDLPropertyDecl then
           LProperty := TDLPropertyDecl(LMember);
       Assert.IsNotNull(LProperty);
-      Assert.AreEqual(1, LProperty.Implements.Count);
+      Assert.AreEqual<NativeInt>(1, LProperty.Implements.Count);
     finally
       LUnit.Free;
     end;
@@ -215,10 +215,10 @@ begin
       LMethod := TDLMethodDecl(
         TDLClassType(TDLTypeDecl(TDLTypeSection(LUnit.Items[0]).Items[0]).TypeExpr)
           .Members[0]);
-      Assert.AreEqual(1, LMethod.Directives.Count);
+      Assert.AreEqual<NativeInt>(1, LMethod.Directives.Count);
       LDirective := LMethod.Directives[0];
       Assert.AreEqual('message', LDirective.Name.Name);
-      Assert.AreEqual(1, LDirective.Values.Count);
+      Assert.AreEqual<NativeInt>(1, LDirective.Values.Count);
     finally
       LUnit.Free;
     end;
@@ -244,7 +244,7 @@ begin
       Assert.AreEqual(0, LDiagnostics.Count);
       Assert.IsTrue(LUnit.Items[0] is TDLMethodDecl);
       LMethod := TDLMethodDecl(LUnit.Items[0]);
-      Assert.AreEqual(1, LMethod.Directives.Count);
+      Assert.AreEqual<NativeInt>(1, LMethod.Directives.Count);
       LDirective := LMethod.Directives[0];
       Assert.AreEqual('external', LDirective.Name.Name);
       Assert.IsTrue(LDirective.Values.Count >= 2);
@@ -402,7 +402,7 @@ begin
       Assert.AreEqual(0, LDiagnostics.Count);
       LMethod := TDLMethodDecl(LUnit.Items[0]);
       LParams := LMethod.Params;
-      Assert.AreEqual(3, LParams.Count);
+      Assert.AreEqual<NativeInt>(3, LParams.Count);
       Assert.AreEqual(pmConst, LParams[0].Modifier);
       Assert.AreEqual(pmVar, LParams[1].Modifier);
       Assert.AreEqual(pmOut, LParams[2].Modifier);
@@ -429,7 +429,7 @@ begin
     try
       Assert.AreEqual(0, LDiagnostics.Count);
       LMethod := TDLMethodDecl(LUnit.Items[0]);
-      Assert.AreEqual(2, LMethod.Params.Count);
+      Assert.AreEqual<NativeInt>(2, LMethod.Params.Count);
       Assert.AreEqual(pmConstRef, LMethod.Params[0].Modifier);
       Assert.AreEqual(pmVarRef, LMethod.Params[1].Modifier);
     finally
@@ -480,8 +480,8 @@ begin
     try
       Assert.AreEqual(0, LDiagnostics.Count);
       LMethod := TDLMethodDecl(LUnit.Items[0]);
-      Assert.AreEqual(1, LMethod.Params.Count);
-      Assert.AreEqual(3, LMethod.Params[0].Names.Count);
+      Assert.AreEqual<NativeInt>(1, LMethod.Params.Count);
+      Assert.AreEqual<NativeInt>(3, LMethod.Params[0].Names.Count);
     finally
       LUnit.Free;
     end;
@@ -510,7 +510,7 @@ begin
       Assert.AreEqual(0, LDiagnostics.Count);
       Assert.IsTrue(LUnit.Items[0] is TDLMethodDecl);
       LMethod := TDLMethodDecl(LUnit.Items[0]);
-      Assert.AreEqual(2, LMethod.Attributes.Count);
+      Assert.AreEqual<NativeInt>(2, LMethod.Attributes.Count);
     finally
       LUnit.Free;
     end;
@@ -534,8 +534,8 @@ begin
     try
       Assert.AreEqual(0, LDiagnostics.Count);
       LMethod := TDLMethodDecl(LUnit.Items[0]);
-      Assert.AreEqual(1, LMethod.Attributes.Count);
-      Assert.AreEqual(3, LMethod.Attributes[0].Args.Count);
+      Assert.AreEqual<NativeInt>(1, LMethod.Attributes.Count);
+      Assert.AreEqual<NativeInt>(3, LMethod.Attributes[0].Args.Count);
     finally
       LUnit.Free;
     end;

@@ -89,7 +89,7 @@ begin
       'uses System.SysUtils, System.Classes;'#13#10+
       'implementation end.', LDiagnostics);
     try
-      Assert.AreEqual(2, LModule.UsedUnits.Count);
+      Assert.AreEqual<NativeInt>(2, LModule.UsedUnits.Count);
       Assert.AreEqual('System.SysUtils', LModule.UsedUnits[0].Name);
       Assert.AreEqual('System.Classes', LModule.UsedUnits[1].Name);
     finally
@@ -115,7 +115,7 @@ begin
       'var B: Integer = 5;'#13#10+
       'implementation end.', LDiagnostics);
     try
-      Assert.AreEqual(2, LModule.Declarations.Count);
+      Assert.AreEqual<NativeInt>(2, LModule.Declarations.Count);
       Assert.IsTrue(LModule.Declarations[0] is TDLConstDecl);
       Assert.IsNotNull(TDLConstDecl(LModule.Declarations[0]).Value);
       Assert.IsTrue(TDLConstDecl(LModule.Declarations[0]).Value
@@ -154,12 +154,12 @@ begin
       Assert.AreEqual(0, LDiagnostics.Count);
       LTypeDecl := TDLTypeDecl(LModule.Declarations[0]);
       Assert.IsTrue(LTypeDecl.TypeDef is TDLEnumTypeDef);
-      Assert.AreEqual(3, TDLEnumTypeDef(LTypeDecl.TypeDef).Members.Count);
+      Assert.AreEqual<NativeInt>(3, TDLEnumTypeDef(LTypeDecl.TypeDef).Members.Count);
       LTypeDecl := TDLTypeDecl(LModule.Declarations[1]);
       Assert.IsTrue(LTypeDecl.TypeDef is TDLClassTypeDef);
       Assert.AreEqual('TObject', TDLClassTypeDef(LTypeDecl.TypeDef).Ancestor);
       // private/public markers + FValue field + DoIt method
-      Assert.AreEqual(4, TDLClassTypeDef(LTypeDecl.TypeDef).Members.Count);
+      Assert.AreEqual<NativeInt>(4, TDLClassTypeDef(LTypeDecl.TypeDef).Members.Count);
     finally
       LModule.Free;
     end;
@@ -230,7 +230,7 @@ begin
       Assert.AreEqual(0, LDiagnostics.Count);
       LProc := TDLProcDecl(LModule.Declarations[0]);
       Assert.IsTrue(LProc.HasBody);
-      Assert.AreEqual(2, LProc.Body.Count);
+      Assert.AreEqual<NativeInt>(2, LProc.Body.Count);
       Assert.IsTrue(LProc.Body[0] is TDLAssignStmt);
       Assert.IsTrue(LProc.Body[1] is TDLIfStmt);
       Assert.IsTrue(TDLIfStmt(LProc.Body[1]).Condition is TDLBinaryExpr);

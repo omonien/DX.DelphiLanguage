@@ -147,10 +147,10 @@ begin
     try
       Assert.AreEqual(0, LDiagnostics.Count);
       Assert.AreEqual(pkUnit, LUnit.ProgramKind);
-      Assert.AreEqual(1, LUnit.UsesClauses.Count);
-      Assert.AreEqual(2, LUnit.UsesClauses[0].References.Count);
+      Assert.AreEqual<NativeInt>(1, LUnit.UsesClauses.Count);
+      Assert.AreEqual<NativeInt>(2, LUnit.UsesClauses[0].References.Count);
       Assert.AreEqual('System.SysUtils', LUnit.UsesClauses[0].References[0].Name.Name);
-      Assert.AreEqual(1, LUnit.Items.Count);
+      Assert.AreEqual<NativeInt>(1, LUnit.Items.Count);
       Assert.IsTrue(LUnit.Items[0] is TDLConstSection);
     finally
       LUnit.Free;
@@ -171,7 +171,7 @@ begin
     try
       Assert.AreEqual(0, LDiagnostics.Count);
       Assert.AreEqual(pkLibrary, LUnit.ProgramKind);
-      Assert.AreEqual(1, LUnit.Items.Count);
+      Assert.AreEqual<NativeInt>(1, LUnit.Items.Count);
       Assert.IsTrue(LUnit.Items[0] is TDLExportsClause);
     finally
       LUnit.Free;
@@ -222,13 +222,13 @@ begin
     try
       Assert.AreEqual(0, LDiagnostics.Count);
       Assert.IsTrue(LUnit.Items[0] is TDLConstSection);
-      Assert.AreEqual(2, TDLConstSection(LUnit.Items[0]).Items.Count);
+      Assert.AreEqual<NativeInt>(2, TDLConstSection(LUnit.Items[0]).Items.Count);
       LConst := TDLConstDecl(TDLConstSection(LUnit.Items[0]).Items[0]);
       Assert.AreEqual('A', LConst.Names[0].Name);
       Assert.IsTrue(LUnit.Items[1] is TDLVarSection);
-      Assert.AreEqual(2, TDLVarSection(LUnit.Items[1]).Items.Count);
+      Assert.AreEqual<NativeInt>(2, TDLVarSection(LUnit.Items[1]).Items.Count);
       LVar := TDLVarDecl(TDLVarSection(LUnit.Items[1]).Items[0]);
-      Assert.AreEqual(2, LVar.Names.Count);
+      Assert.AreEqual<NativeInt>(2, LVar.Names.Count);
       Assert.AreEqual('Integer', TDLNamedType(LVar.TypeExpr).Name.Name);
       Assert.IsNotNull(TDLVarDecl(
         TDLVarSection(LUnit.Items[1]).Items[1]).Init);
@@ -256,10 +256,10 @@ begin
     try
       Assert.AreEqual(0, LDiagnostics.Count);
       LSection := TDLTypeSection(LUnit.Items[0]);
-      Assert.AreEqual(2, LSection.Items.Count);
+      Assert.AreEqual<NativeInt>(2, LSection.Items.Count);
       Assert.AreEqual('TInt', TDLTypeDecl(LSection.Items[0]).Name.Name);
       Assert.IsTrue(TDLTypeDecl(LSection.Items[1]).TypeExpr is TDLStaticArrayType);
-      Assert.AreEqual(1, TDLStaticArrayType(
+      Assert.AreEqual<NativeInt>(1, TDLStaticArrayType(
         TDLTypeDecl(LSection.Items[1]).TypeExpr).Bounds.Count);
     finally
       LUnit.Free;
@@ -350,7 +350,7 @@ begin
            (TDLMethodDecl(LMember).Name.Name = 'DoWork') then
         begin
           LFoundMethod := True;
-          Assert.AreEqual(1, TDLMethodDecl(LMember).Directives.Count);
+          Assert.AreEqual<NativeInt>(1, TDLMethodDecl(LMember).Directives.Count);
         end;
       Assert.IsTrue(LFoundMethod, 'DoWork method not found');
     finally
@@ -383,8 +383,8 @@ begin
       LRecord := TDLRecordType(TDLTypeDecl(TDLTypeSection(LUnit.Items[0]).Items[0]).TypeExpr);
       Assert.IsNotNull(LRecord.VariantPart);
       Assert.AreEqual('Kind', LRecord.VariantPart.Tag.Name);
-      Assert.AreEqual(2, LRecord.VariantPart.Variants.Count);
-      Assert.AreEqual(1, LRecord.VariantPart.Variants[0].Fields.Count);
+      Assert.AreEqual<NativeInt>(2, LRecord.VariantPart.Variants.Count);
+      Assert.AreEqual<NativeInt>(1, LRecord.VariantPart.Variants[0].Fields.Count);
     finally
       LUnit.Free;
     end;
@@ -418,7 +418,7 @@ begin
       Assert.IsNotNull(LHelper.HelperFor);
       LHelper := TDLClassType(TDLTypeDecl(TDLTypeSection(LUnit.Items[0]).Items[1]).TypeExpr);
       Assert.IsTrue(LHelper.IsHelper);
-      Assert.AreEqual(1, LHelper.Members.Count);
+      Assert.AreEqual<NativeInt>(1, LHelper.Members.Count);
     finally
       LUnit.Free;
     end;
@@ -449,7 +449,7 @@ begin
       Assert.AreEqual(0, LDiagnostics.Count);
       LClass := TDLClassType(TDLTypeDecl(TDLTypeSection(LUnit.Items[0]).Items[0]).TypeExpr);
       // 4 members: private/public visibility markers + FItems field + Add method
-      Assert.AreEqual(4, LClass.Members.Count);
+      Assert.AreEqual<NativeInt>(4, LClass.Members.Count);
       Assert.IsTrue(LClass.Members[1] is TDLFieldDecl);
       Assert.IsTrue(LClass.Members[3] is TDLMethodDecl);
     finally
@@ -480,7 +480,7 @@ begin
         TDLTypeDecl(TDLTypeSection(LUnit.Items[0]).Items[0]).TypeExpr);
       Assert.IsTrue(LProcType.IsReferenceTo);
       Assert.AreEqual(prFunction, LProcType.Kind);
-      Assert.AreEqual(1, LProcType.Params.Count);
+      Assert.AreEqual<NativeInt>(1, LProcType.Params.Count);
       LProcType := TDLProceduralType(
         TDLTypeDecl(TDLTypeSection(LUnit.Items[0]).Items[1]).TypeExpr);
       Assert.IsTrue(LProcType.IsOfObject);
@@ -511,7 +511,7 @@ begin
     try
       Assert.AreEqual(0, LDiagnostics.Count);
       LBody := TDLCompoundStmt(LUnit.InitSection.Body);
-      Assert.AreEqual(2, LBody.Statements.Count);
+      Assert.AreEqual<NativeInt>(2, LBody.Statements.Count);
       Assert.IsTrue(LBody.Statements[0] is TDLIfStmt);
       Assert.IsNotNull(TDLIfStmt(LBody.Statements[0]).ElseBranch);
       Assert.IsTrue(LBody.Statements[1] is TDLCompoundStmt);
@@ -544,8 +544,8 @@ begin
       Assert.AreEqual(0, LDiagnostics.Count);
       LCase := TDLCaseStmt(TDLCompoundStmt(
         LUnit.InitSection.Body).Statements[0]);
-      Assert.AreEqual(3, LCase.Selectors.Count);
-      Assert.AreEqual(2, LCase.Selectors[1].Labels.Count);
+      Assert.AreEqual<NativeInt>(3, LCase.Selectors.Count);
+      Assert.AreEqual<NativeInt>(2, LCase.Selectors[1].Labels.Count);
       Assert.IsNotNull(LCase.ElseBranch);
     finally
       LUnit.Free;
@@ -614,7 +614,7 @@ begin
       LTry := TDLTryStmt(TDLCompoundStmt(
         LUnit.InitSection.Body).Statements[0]);
       Assert.IsTrue(LTry.IsExcept);
-      Assert.AreEqual(1, LTry.OnHandlers.Count);
+      Assert.AreEqual<NativeInt>(1, LTry.OnHandlers.Count);
       Assert.AreEqual('E', LTry.OnHandlers[0].VarName.Name);
       Assert.AreEqual('Exception', LTry.OnHandlers[0].TypeName.Name);
       Assert.IsNotNull(LTry.ElseBranch);
@@ -649,7 +649,7 @@ begin
       Assert.AreEqual(0, LDiagnostics.Count);
       LBody := TDLCompoundStmt(LUnit.InitSection.Body);
       Assert.IsTrue(LBody.Statements[0] is TDLWithStmt);
-      Assert.AreEqual(2, TDLWithStmt(LBody.Statements[0]).Expressions.Count);
+      Assert.AreEqual<NativeInt>(2, TDLWithStmt(LBody.Statements[0]).Expressions.Count);
       Assert.IsTrue(LBody.Statements[1] is TDLRepeatStmt);
       Assert.IsNotNull(TDLRepeatStmt(LBody.Statements[1]).Condition);
     finally
@@ -717,7 +717,7 @@ begin
       Assert.IsTrue(LAssign.Value is TDLMemberExpr);
       LMember := TDLMemberExpr(LAssign.Value);
       Assert.IsTrue(LMember.Target is TDLGenericInstantiationExpr);
-      Assert.AreEqual(1, TDLGenericInstantiationExpr(
+      Assert.AreEqual<NativeInt>(1, TDLGenericInstantiationExpr(
         LMember.Target).TypeArgs.Count);
       // a < b must remain a comparison
       LAssign := TDLAssignmentStmt(TDLCompoundStmt(
@@ -750,7 +750,7 @@ begin
       LAssign := TDLAssignmentStmt(TDLCompoundStmt(
         LUnit.InitSection.Body).Statements[0]);
       Assert.IsTrue(LAssign.Value is TDLSetExpr);
-      Assert.AreEqual(3, TDLSetExpr(LAssign.Value).Elements.Count);
+      Assert.AreEqual<NativeInt>(3, TDLSetExpr(LAssign.Value).Elements.Count);
       LAssign := TDLAssignmentStmt(TDLCompoundStmt(
         LUnit.InitSection.Body).Statements[1]);
       Assert.IsTrue(LAssign.Value is TDLSetExpr);
@@ -783,7 +783,7 @@ begin
       LAssign := TDLAssignmentStmt(TDLCompoundStmt(
         LUnit.InitSection.Body).Statements[0]);
       Assert.IsTrue(LAssign.Value is TDLAnonymousMethodExpr);
-      Assert.AreEqual(1, TDLAnonymousMethodExpr(
+      Assert.AreEqual<NativeInt>(1, TDLAnonymousMethodExpr(
         LAssign.Value).Params.Count);
       Assert.IsNotNull(TDLAnonymousMethodExpr(
         LAssign.Value).Body);
@@ -817,11 +817,11 @@ begin
         LUnit.InitSection.Body).Statements[0]);
       Assert.IsTrue(LStmt.Expression is TDLCallExpr);
       Assert.IsTrue(TDLCallExpr(LStmt.Expression).Callee is TDLMemberExpr);
-      Assert.AreEqual(2, TDLCallExpr(LStmt.Expression).Args.Count);
+      Assert.AreEqual<NativeInt>(2, TDLCallExpr(LStmt.Expression).Args.Count);
       LAssign := TDLAssignmentStmt(TDLCompoundStmt(
         LUnit.InitSection.Body).Statements[1]);
       Assert.IsTrue(LAssign.Value is TDLIndexExpr);
-      Assert.AreEqual(2, TDLIndexExpr(LAssign.Value).Indices.Count);
+      Assert.AreEqual<NativeInt>(2, TDLIndexExpr(LAssign.Value).Indices.Count);
     finally
       LUnit.Free;
     end;

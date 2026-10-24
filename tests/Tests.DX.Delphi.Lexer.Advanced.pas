@@ -179,7 +179,7 @@ begin
     LTokens := TokenizeToArray('(* a comment *) x', LDiagnostics);
     Assert.AreEqual(0, LDiagnostics.Count);
     Assert.AreEqual<NativeInt>(2, Length(LTokens));
-    Assert.AreEqual(2, LTokens[0].LeadingTrivia.Count);
+    Assert.AreEqual<NativeInt>(2, LTokens[0].LeadingTrivia.Count);
     Assert.AreEqual(trBlockComment, LTokens[0].LeadingTrivia[0].Kind);
   finally
     LDiagnostics.Free;

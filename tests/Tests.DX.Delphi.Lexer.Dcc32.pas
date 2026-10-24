@@ -222,7 +222,7 @@ begin
     LTokens := LexSource('asm DW 10H end 10H', LDiagnostics);
     try
       Assert.AreEqual(0, LDiagnostics.Count);
-      Assert.AreEqual(7, LTokens.Count);
+      Assert.AreEqual<NativeInt>(7, LTokens.Count);
       Assert.AreEqual('10H', LTokens[2].Text);
       Assert.AreEqual(Ord(tkInteger), Ord(LTokens[2].Kind));
       Assert.AreEqual<Int64>(16, LTokens[2].IntegerValue);
