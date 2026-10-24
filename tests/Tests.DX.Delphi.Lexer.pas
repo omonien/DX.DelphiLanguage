@@ -132,7 +132,7 @@ begin
   LDiagnostics := TDLDiagnostics.Create;
   try
     LTokens := TokenizeToArray('', LDiagnostics);
-    Assert.AreEqual(1, Length(LTokens));
+    Assert.AreEqual<NativeInt>(1, Length(LTokens));
     Assert.AreEqual(tkEOF, LTokens[0].Kind);
     Assert.AreEqual(0, LDiagnostics.Count);
   finally
@@ -320,7 +320,7 @@ begin
   LDiagnostics := TDLDiagnostics.Create;
   try
     LTokens := TokenizeToArray('#65#$41#%1000001', LDiagnostics);
-    Assert.AreEqual(3, Length(LTokens) - 1); // 3 char codes + EOF
+    Assert.AreEqual<NativeInt>(3, Length(LTokens) - 1); // 3 char codes + EOF
     Assert.AreEqual(tkCharCode, LTokens[0].Kind);
     Assert.AreEqual('A', LTokens[0].Value);
     Assert.AreEqual('A', LTokens[1].Value);
@@ -378,7 +378,7 @@ begin
   try
     LTokens := TokenizeToArray('#6_5#$4_1#%100_0001', LDiagnostics);
     Assert.AreEqual(0, LDiagnostics.Count);
-    Assert.AreEqual(4, Length(LTokens));
+    Assert.AreEqual<NativeInt>(4, Length(LTokens));
     Assert.AreEqual(tkCharCode, LTokens[0].Kind);
     Assert.AreEqual('A', LTokens[0].Value);
     Assert.AreEqual('A', LTokens[1].Value);
@@ -399,7 +399,7 @@ begin
   try
     LTokens := TokenizeToArray('a// comment'#13#10'b', LDiagnostics);
     // tokens: a, b, EOF (comments/whitespace are trivia, not tokens)
-    Assert.AreEqual(3, Length(LTokens));
+    Assert.AreEqual<NativeInt>(3, Length(LTokens));
     // b carries the line comment AND the line break
     Assert.AreEqual(2, LTokens[1].LeadingTrivia.Count);
     Assert.AreEqual(trLineComment, LTokens[1].LeadingTrivia[0].Kind);
@@ -419,7 +419,7 @@ begin
   try
     LTokens := TokenizeToArray('{ outer { inner } still x', LDiagnostics);
     Assert.AreEqual(0, LDiagnostics.Count);
-    Assert.AreEqual(3, Length(LTokens));
+    Assert.AreEqual<NativeInt>(3, Length(LTokens));
     Assert.AreEqual('still', LTokens[0].Text);
     Assert.AreEqual(2, LTokens[0].LeadingTrivia.Count);
     Assert.AreEqual(trBlockComment, LTokens[0].LeadingTrivia[0].Kind);
@@ -439,7 +439,7 @@ begin
   try
     LTokens := TokenizeToArray('{$IFDEF DEBUG} x', LDiagnostics);
     Assert.AreEqual(0, LDiagnostics.Count);
-    Assert.AreEqual(2, Length(LTokens));
+    Assert.AreEqual<NativeInt>(2, Length(LTokens));
     Assert.AreEqual(trDirective, LTokens[0].LeadingTrivia[0].Kind);
   finally
     LDiagnostics.Free;
@@ -470,7 +470,7 @@ begin
   try
     LTokens := TokenizeToArray('a ? b', LDiagnostics);
     Assert.AreEqual('DLX-01', FirstErrorCode(LDiagnostics));
-    Assert.AreEqual(4, Length(LTokens)); // a, ?, b, EOF
+    Assert.AreEqual<NativeInt>(4, Length(LTokens)); // a, ?, b, EOF
     Assert.AreEqual(tkUnknown, LTokens[1].Kind);
   finally
     LDiagnostics.Free;

@@ -143,7 +143,7 @@ begin
   try
     LTokens := TokenizeToArray('0..9', LDiagnostics);
     Assert.AreEqual(0, LDiagnostics.Count);
-    Assert.AreEqual(4, Length(LTokens)); // 0, '..', 9, EOF
+    Assert.AreEqual<NativeInt>(4, Length(LTokens)); // 0, '..', 9, EOF
     Assert.AreEqual('..', LTokens[1].Text);
   finally
     LDiagnostics.Free;
@@ -178,7 +178,7 @@ begin
   try
     LTokens := TokenizeToArray('(* a comment *) x', LDiagnostics);
     Assert.AreEqual(0, LDiagnostics.Count);
-    Assert.AreEqual(2, Length(LTokens));
+    Assert.AreEqual<NativeInt>(2, Length(LTokens));
     Assert.AreEqual(2, LTokens[0].LeadingTrivia.Count);
     Assert.AreEqual(trBlockComment, LTokens[0].LeadingTrivia[0].Kind);
   finally
@@ -197,7 +197,7 @@ begin
   try
     LTokens := TokenizeToArray('(* outer (* inner *) done x', LDiagnostics);
     Assert.AreEqual(0, LDiagnostics.Count);
-    Assert.AreEqual(3, Length(LTokens));
+    Assert.AreEqual<NativeInt>(3, Length(LTokens));
     Assert.AreEqual('done', LTokens[0].Text);
     Assert.AreEqual(trBlockComment, LTokens[0].LeadingTrivia[0].Kind);
     Assert.AreEqual('(* outer (* inner *)', LTokens[0].LeadingTrivia[0].Text);
